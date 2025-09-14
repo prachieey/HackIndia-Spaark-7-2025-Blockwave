@@ -1,0 +1,20 @@
+doctype html
+html
+  head
+    meta(charset='UTF-8')
+    meta(name='viewport' content='width=device-width, initial-scale=1.0')
+    title= `${subject}`
+    style
+      include styles.css
+  body
+    .email-container
+      .header
+        h1 Scantyx
+        p Hybrid Blockchain Event Ticketing
+      
+      .content
+        block content
+      
+      .footer
+        p © #{new Date().getFullYear()} Scantyx. All rights reserved.
+        p If you didn't request this email, please ignore it.

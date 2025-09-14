@@ -1,41 +1,58 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { authAPI } from '../utils/api';
 
 const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  // Admin credentials
-  const ADMIN_EMAIL = 'admin@scantyx.com';
-  const ADMIN_PASSWORD = 'Admin@123!'; // In production, this should be properly secured
-
-  useEffect(() => {
+  const [state, setState] = useState(() => {
     const storedUser = localStorage.getItem('scantyx_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setLoading(false);
+    return {
+      user: storedUser ? JSON.parse(storedUser) : null,
+      loading: false,
+      error: null
+    };
+  });
+
+  // Admin credentials - use useMemo to prevent recreation
+  const ADMIN_CREDENTIALS = useMemo(() => ({
+    email: 'admin@scantyx.com',
+    password: 'admin123' // Using the password we set in createAdmin.js
+  }), []);
+
+  // Wrap state updates in useCallback to maintain referential equality
+  const setAuthState = useCallback((newState) => {
+    setState(prev => ({
+      ...prev,
+      ...(typeof newState === 'function' ? newState(prev) : newState)
+    }));
   }, []);
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     console.log('Login attempt with:', { email });
+    setState(prev => ({ ...prev, loading: true, error: null }));
+    
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Check if admin login
-      if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+      if (email === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password) {
         const adminUser = {
           id: 'admin',
           name: 'Admin',
-          email: ADMIN_EMAIL,
+          email: ADMIN_CREDENTIALS.email,
           role: 'admin',
           createdAt: new Date().toISOString()
         };
-        console.log('Admin login successful, setting user:', adminUser);
-        setUser(adminUser);
+        
+        setState({ 
+          user: adminUser,
+          loading: false,
+          error: null
+        });
+        
         localStorage.setItem('scantyx_user', JSON.stringify(adminUser));
         return { success: true };
       }
@@ -49,13 +66,22 @@ export const AuthProvider = ({ children }) => {
         createdAt: new Date().toISOString()
       };
       
-      setUser(mockUser);
+      setState(prev => ({
+        ...prev,
+        user: mockUser,
+        loading: false
+      }));
       localStorage.setItem('scantyx_user', JSON.stringify(mockUser));
       return { success: true };
     } catch (error) {
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Failed to login'
+      }));
       return { success: false, error: error.message || 'Failed to login' };
     }
-  };
+  }, [ADMIN_CREDENTIALS, setState]);
 
   const signup = async (name, email, password) => {
     try {
@@ -84,50 +110,92 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    console.log('Logout initiated');
+    console.log('[AuthContext] Logout initiated');
     try {
-      // Clear any active web3 connections
-      if (window.ethereum?.removeListener) {
-        window.ethereum.removeListener('accountsChanged', () => {});
-        window.ethereum.removeListener('chainChanged', () => {});
+      // Try to disconnect wallet if Web3 is available
+      if (window.ethereum) {
+        console.log('[AuthContext] Disconnecting wallet');
+        try {
+          // Try to use Web3Context first
+          const { disconnectWallet } = await import('./blockchain/Web3Context');
+          if (typeof disconnectWallet === 'function') {
+            await disconnectWallet();
+            console.log('[AuthContext] Wallet disconnected via Web3Context');
+          }
+        } catch (error) {
+          console.warn('[AuthContext] Error using Web3Context, using direct ethereum API', error);
+          // Fallback to direct ethereum API
+          if (window.ethereum.removeListener) {
+            window.ethereum.removeAllListeners();
+          }
+          if (window.ethereum._state) {
+            window.ethereum._state.accounts = [];
+          }
+          if (window.ethereum.selectedAddress) {
+            window.ethereum.selectedAddress = null;
+          }
+        }
       }
       
-      // Clear user data
-      console.log('Clearing user data');
+      // Call the logout API
+      try {
+        console.log('[AuthContext] Calling logout API');
+        await authAPI.logout();
+        console.log('[AuthContext] Logout API call successful');
+      } catch (error) {
+        console.warn('[AuthContext] Logout API call failed, but continuing with local logout', error);
+      }
+      
+      // Clear all local data
+      console.log('[AuthContext] Clearing local storage and state');
       setUser(null);
       localStorage.removeItem('scantyx_user');
-      
-      // Clear any additional auth tokens or session data
       localStorage.removeItem('auth_token');
       sessionStorage.clear();
       
-      console.log('Logout successful');
+      // Clear any remaining cookies by setting an expired cookie
+      console.log('[AuthContext] Clearing cookies');
+      document.cookie = 'jwt=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      document.cookie = 'connect.sid=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      
+      console.log('[AuthContext] Logout completed successfully');
       return { success: true };
     } catch (error) {
-      console.error('Error during logout:', error);
-      return { success: false, error: error.message };
+      console.error('[AuthContext] Error during logout:', error);
+      // Ensure we still clear local data even if there's an error
+      setUser(null);
+      localStorage.removeItem('scantyx_user');
+      localStorage.removeItem('auth_token');
+      sessionStorage.clear();
+      return { success: false, error: error.message || 'Failed to logout' };
     }
   };
 
-  const value = {
-    user,
-    loading,
+  // Memoize the context value to prevent unnecessary re-renders
+  const contextValue = useMemo(() => ({
+    user: state.user,
+    loading: state.loading,
+    isAuthenticated: !!state.user,
+    isAdmin: state.user?.role === 'admin',
     login,
     signup,
     logout,
-    isAuthenticated: !!user,
-    isAdmin: user?.role === 'admin'
-  };
+    setAuthState
+  }), [state.user, state.loading, login, signup, logout, setAuthState]);
 
   // Debug: Log when auth state changes
   useEffect(() => {
     console.log('Auth state updated:', {
-      user,
-      isAuthenticated: !!user,
-      isAdmin: user?.role === 'admin',
-      loading
+      user: state.user,
+      isAuthenticated: !!state.user,
+      isAdmin: state.user?.role === 'admin',
+      loading: state.loading
     });
-  }, [user, loading]);
+  }, [state.user, state.loading]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
 };

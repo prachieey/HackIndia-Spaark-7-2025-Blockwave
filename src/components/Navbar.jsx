@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { QrCode, Menu, X, LogIn, UserPlus, User, Shield, LogOut, UserCircle } from 'lucide-react';
+import { QrCode, Menu, X, LogIn, UserPlus, User, Shield, LogOut, UserCircle, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useWeb3 } from '../contexts/blockchain/Web3Context';
 import WalletConnect from './wallet/WalletConnect';
 
 const Navbar = ({ openAuthModal }) => {
@@ -11,7 +12,9 @@ const Navbar = ({ openAuthModal }) => {
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const { isConnected } = useWeb3();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -41,10 +44,33 @@ const Navbar = ({ openAuthModal }) => {
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
   const closeMenu = () => setIsMenuOpen(false);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-    closeMenu();
+  const handleLogout = async (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    try {
+      await logout();
+      
+      // Force a full page reload to ensure all states are reset
+      window.location.href = '/';
+    } catch (error) {
+      console.error('[Navbar] Logout error:', error);
+    }
+  };
+  
+  // Connect wallet handler
+  const handleConnectWallet = async () => {
+    try {
+      // Import Web3Context to use its connectWallet function
+      const { connectWallet } = await import('../contexts/blockchain/Web3Context');
+      if (typeof connectWallet === 'function') {
+        await connectWallet();
+      }
+    } catch (error) {
+      console.error('Error connecting wallet:', error);
+    }
   };
 
   const navLinks = [
@@ -88,68 +114,103 @@ const Navbar = ({ openAuthModal }) => {
         </div>
 
         <div className="hidden md:flex items-center space-x-6">
-          {/* Wallet Connect Button */}
-          <WalletConnect />
+          {/* Show wallet connect only when user is logged in */}
+          {user && <WalletConnect />}
           
           {user ? (
-            <div className="relative border-l border-gray-700 pl-6">
+            <div className="relative">
               <button 
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className="flex items-center space-x-2 focus:outline-none"
+                className="flex items-center space-x-2 focus:outline-none group"
+                aria-expanded={isProfileOpen}
+                aria-haspopup="true"
               >
                 <div className="relative">
-                  <UserCircle className="h-10 w-10 text-gray-300 hover:text-white transition-colors" />
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-medium text-lg shadow-lg group-hover:shadow-indigo-500/30 transition-all duration-300">
+                    {user?.name?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-gray-900"></div>
                 </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium text-white group-hover:text-indigo-300 transition-colors">
+                    {user?.name || 'User'}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {isAdmin ? 'Admin' : 'Member'}
+                  </p>
+                </div>
+                <ChevronDown className={`w-4 h-4 text-gray-300 transition-transform duration-200 ${isProfileOpen ? 'transform rotate-180' : ''}`} />
               </button>
               
-              {/* Dropdown Menu */}
-              {isProfileOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50">
+              {/* Animated Dropdown Menu */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={isProfileOpen ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className={`absolute right-0 mt-3 w-56 origin-top-right bg-gray-800 rounded-xl shadow-2xl overflow-hidden z-50 ${isProfileOpen ? 'block' : 'hidden'}`}
+              >
+                <div className="p-1">
                   <Link
                     to="/user"
-                    className="flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                    className="flex items-center px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white rounded-lg transition-colors group"
                     onClick={() => setIsProfileOpen(false)}
                   >
-                    <User className="h-4 w-4 mr-2" />
-                    <span>Dashboard</span>
+                    <div className="p-2 mr-3 rounded-lg bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors">
+                      <User className="h-5 w-5 text-indigo-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium">My Profile</p>
+                      <p className="text-xs text-gray-400">View your account</p>
+                    </div>
                   </Link>
+                  
                   {isAdmin && (
                     <Link
                       to="/admin/dashboard"
-                      className="flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                      className="flex items-center px-4 py-3 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white rounded-lg transition-colors group mt-1"
                       onClick={() => setIsProfileOpen(false)}
                     >
-                      <Shield className="h-4 w-4 mr-2" />
-                      <span>Admin Panel</span>
+                      <div className="p-2 mr-3 rounded-lg bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
+                        <Shield className="h-5 w-5 text-amber-400" />
+                      </div>
+                      <div>
+                        <p className="font-medium">Admin Panel</p>
+                        <p className="text-xs text-gray-400">Manage platform</p>
+                      </div>
                     </Link>
                   )}
+                  
+                  <div className="border-t border-gray-700/50 my-1"></div>
+                  
                   <button
-                    onClick={() => {
-                      handleLogout();
-                      setIsProfileOpen(false);
-                    }}
-                    className="w-full text-left flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-red-400"
+                    onClick={handleLogout}
+                    className="w-full flex items-center px-4 py-3 text-sm text-gray-300 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-colors group"
                   >
-                    <LogOut className="h-4 w-4 mr-2" />
-                    <span>Logout</span>
+                    <div className="p-2 mr-3 rounded-lg bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
+                      <LogOut className="h-5 w-5 text-red-400" />
+                    </div>
+                    <span className="font-medium">Sign out</span>
                   </button>
                 </div>
-              )}
+                
+                <div className="px-4 py-2.5 bg-gray-900/50 text-xs text-gray-400">
+                  {user?.email || 'user@example.com'}
+                </div>
+              </motion.div>
             </div>
           ) : (
-            <div className="flex items-center space-x-3 border-l border-gray-700 pl-6">
+            <div className="flex space-x-4">
               <button
-                onClick={() => openAuthModal('signin')}
-                className="flex items-center space-x-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                onClick={handleConnectWallet}
+                className="px-4 py-2 bg-tech-blue hover:bg-tech-blue/90 text-white rounded-lg transition-colors"
               >
-                <LogIn className="h-5 w-5" />
-                <span>Sign In</span>
+                Connect Wallet
               </button>
               <button
-                onClick={() => openAuthModal('signup')}
-                className="px-4 py-2 rounded-lg bg-deep-purple text-white text-sm font-medium hover:bg-purple-700 transition-colors"
+                onClick={() => openAuthModal('login')}
+                className="px-4 py-2 text-white hover:bg-deep-purple/20 rounded-lg transition-colors"
               >
-                Sign Up
+                Login
               </button>
             </div>
           )}
@@ -189,6 +250,12 @@ const Navbar = ({ openAuthModal }) => {
             
             {user ? (
               <div className="pt-2 border-t border-gray-700">
+                {!isConnected && (
+                  <div className="mb-3">
+                    <p className="text-sm text-gray-400 mb-2">Connect your wallet to use blockchain features</p>
+                    <WalletConnect />
+                  </div>
+                )}
                 <Link 
                   to="/user" 
                   className="flex items-center space-x-2 text-holographic-white hover:text-tech-blue transition-colors py-2"
@@ -216,27 +283,23 @@ const Navbar = ({ openAuthModal }) => {
                 </button>
               </div>
             ) : (
-              <div className="pt-2 border-t border-gray-700 space-y-3">
-                <button
-                  onClick={() => {
-                    openAuthModal('signin');
-                    closeMenu();
-                  }}
-                  className="w-full flex items-center space-x-2 text-holographic-white hover:text-tech-blue transition-colors py-2"
+              <div className="flex flex-col space-y-2 pt-2 border-t border-gray-700">
+                <Link
+                  to="/login"
+                  className="flex items-center space-x-2 text-holographic-white hover:text-tech-blue transition-colors py-2"
+                  onClick={closeMenu}
                 >
                   <LogIn className="h-5 w-5" />
-                  <span>Sign In</span>
-                </button>
-                <button
-                  onClick={() => {
-                    openAuthModal('signup');
-                    closeMenu();
-                  }}
-                  className="w-full flex items-center justify-center space-x-2 bg-deep-purple text-white rounded-lg py-2 px-4 hover:bg-purple-700 transition-colors"
+                  <span>Login</span>
+                </Link>
+                <Link
+                  to="/register"
+                  className="flex items-center space-x-2 text-holographic-white hover:text-tech-blue transition-colors py-2"
+                  onClick={closeMenu}
                 >
                   <UserPlus className="h-5 w-5" />
-                  <span>Sign Up</span>
-                </button>
+                  <span>Register</span>
+                </Link>
               </div>
             )}
           </div>

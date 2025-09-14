@@ -90,7 +90,7 @@ const HomePage = () => {
               
               <div className="flex flex-col sm:flex-row gap-4">
                 {isAuthenticated ? (
-                  <Link to="/create-event" className="btn btn-primary">
+                  <Link to="/user/create-event" className="btn btn-primary">
                     Host an Event
                   </Link>
                 ) : (

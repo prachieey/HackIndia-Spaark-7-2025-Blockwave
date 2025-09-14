@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Calendar, MapPin, Users, Clock, User, ArrowLeft, AlertCircle, Check } from 'lucide-react';
+import { Calendar, MapPin, Users, Clock, User, ArrowLeft, AlertCircle, Check, Star, MessageSquare } from 'lucide-react';
 import { useEvents } from '../contexts/EventsContext';
 import { useAuth } from '../contexts/AuthContext';
+import { ReviewsSection } from '../components/reviews';
 
 const EventDetailsPage = () => {
   const { eventId } = useParams();
@@ -269,6 +270,15 @@ const EventDetailsPage = () => {
           </motion.div>
         </div>
       )}
+      
+      {/* Reviews Section */}
+      <section className="container mx-auto px-4 py-12">
+        <div className="flex items-center mb-8">
+          <Star className="h-6 w-6 text-yellow-500 mr-2" />
+          <h2 className="text-2xl font-bold text-gray-900">Event Reviews</h2>
+        </div>
+        <ReviewsSection />
+      </section>
     </div>
   );
 };

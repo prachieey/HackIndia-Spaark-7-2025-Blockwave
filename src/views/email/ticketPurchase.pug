@@ -1,0 +1,28 @@
+extends base
+
+block content
+  .email-content
+    h2 🎉 Your Tickets Are Here, #{firstName}!
+    p Thank you for your purchase. Your tickets are now available in your Scantyx account.
+    
+    .ticket-details
+      h3 Order Summary
+      p Order Number: ##{orderNumber}
+      p Date: #{purchaseDate}
+      p Total: #{orderTotal}
+      
+      each ticket in tickets
+        .ticket
+          h4 #{ticket.eventName}
+          p Date: #{ticket.eventDate}
+          p Location: #{ticket.eventLocation}
+          p Ticket Type: #{ticket.type}
+          p Quantity: #{ticket.quantity}
+          p Price: #{ticket.price} x #{ticket.quantity} = #{ticket.total}
+    
+    .cta-button
+      a(href=url, target='_blank') View Tickets
+    
+    p Your tickets are also attached to this email as a PDF. You can show the QR code at the event entrance.
+    
+    p If you have any questions about your order, please reply to this email.

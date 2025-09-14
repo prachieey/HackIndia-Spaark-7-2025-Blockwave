@@ -1,144 +1,273 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Calendar, MapPin, Users, Clock, ExternalLink } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Calendar, MapPin, Users, Star, Share2, Heart } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useWeb3 } from '../../contexts/blockchain/Web3Context';
+import { useAuth } from '../../contexts/AuthContext';
+import { format, parseISO, isPast, isToday, isTomorrow, isThisWeek } from 'date-fns';
 import { ethers } from 'ethers';
 
-const EventCard = ({ event }) => {
+// Default event image
+const DEFAULT_EVENT_IMAGE = 'https://images.unsplash.com/photo-1531058020387-3be344556be6?ixlib=rb-4.0.3&auto=format&fit=crop&w=1470&q=80';
+
+const EventCard = ({ 
+  event, 
+  onClick = () => {},
+  isSelected = false,
+  className = ''
+}) => {
+  const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const { formatEther } = ethers.utils;
   const { chainId } = useWeb3();
-  const [formattedDate, setFormattedDate] = useState('');
-  const [isHovered, setIsHovered] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [imageError, setImageError] = useState(false);
   
-  // Format price from wei to ETH
-  const formatPrice = (priceInWei) => {
-    if (!priceInWei) return 'Free';
-    const priceInEth = formatEther(priceInWei);
-    return `${parseFloat(priceInEth).toFixed(4)} ETH`;
+  // Parse event data
+  const eventData = useMemo(() => ({
+    ...event,
+    id: event._id || event.id || 'no-id',
+    title: event.name || event.title || 'Untitled Event',
+    description: event.description || 'No description available.',
+    image: event.image || event.coverImage || DEFAULT_EVENT_IMAGE,
+    date: event.date || event.startDate,
+    location: event.location?.name || event.venue || 'Location not specified',
+    price: event.price || event.ticketPrice || 0,
+    category: event.category || 'Other',
+    capacity: event.capacity || event.maxAttendees || 0,
+    registered: event.attendees?.length || 0,
+    isFree: !event.price && !event.ticketPrice,
+    rating: event.rating || 0
+  }), [event]);
+
+  // Format date and time
+  const formattedDate = useMemo(() => {
+    if (!eventData.date) return { date: 'Date not specified', time: '', full: 'Date not specified' };
+    
+    const date = typeof eventData.date === 'string' ? parseISO(eventData.date) : new Date(eventData.date);
+    if (isNaN(date.getTime())) return { date: 'Invalid date', time: '', full: 'Invalid date' };
+    
+    // Relative date (Today, Tomorrow, This Week, or specific date)
+    let relativeDate = '';
+    if (isToday(date)) {
+      relativeDate = 'Today';
+    } else if (isTomorrow(date)) {
+      relativeDate = 'Tomorrow';
+    } else if (isThisWeek(date)) {
+      relativeDate = format(date, 'EEEE'); // Day of week
+    } else {
+      relativeDate = format(date, 'MMM d, yyyy');
+    }
+    
+    // Time
+    const time = format(date, 'h:mm a');
+    
+    return { 
+      date: relativeDate, 
+      time, 
+      full: format(date, 'EEEE, MMMM d, yyyy • h:mm a') 
+    };
+  }, [eventData.date]);
+
+  // Format price
+  const formattedPrice = useMemo(() => {
+    if (eventData.isFree) return { text: 'Free', value: 0 };
+    
+    try {
+      // If price is in wei (from blockchain)
+      if (typeof eventData.price === 'string' && eventData.price.startsWith('0x')) {
+        const priceInEth = parseFloat(formatEther(eventData.price));
+        return { 
+          text: `${priceInEth.toFixed(4)} ETH`,
+          value: priceInEth
+        };
+      }
+      
+      // If price is in fiat
+      const price = parseFloat(eventData.price);
+      if (isNaN(price)) return { text: 'Free', value: 0 };
+      
+      return { 
+        text: `$${price.toFixed(2)}`,
+        value: price
+      };
+    } catch (error) {
+      console.error('Error formatting price:', error);
+      return { text: 'Free', value: 0 };
+    }
+  }, [eventData.price, formatEther]);
+
+  // Calculate event status
+  const eventStatus = useMemo(() => {
+    if (!eventData.date) return 'upcoming';
+    
+    const eventDate = typeof eventData.date === 'string' ? parseISO(eventData.date) : new Date(eventData.date);
+    
+    if (isPast(eventDate)) return 'past';
+    if (isToday(eventDate)) return 'today';
+    if (isTomorrow(eventDate)) return 'tomorrow';
+    return 'upcoming';
+  }, [eventData.date]);
+
+  // Handle image error
+  const handleImageError = () => {
+    setImageError(true);
   };
 
-  // Format timestamp to readable date
-  useEffect(() => {
-    if (event.date) {
-      // Check if date is a timestamp (number) or ISO string
-      const timestamp = typeof event.date === 'number' ? event.date * 1000 : event.date;
-      const date = new Date(timestamp);
-      
-      const options = { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-      };
-      
-      setFormattedDate(date.toLocaleDateString('en-US', options));
-    }
-  }, [event.date]);
+  // Toggle favorite status
+  const toggleFavorite = (e) => {
+    e.stopPropagation();
+    setIsFavorite(!isFavorite);
+    // TODO: Implement favorite functionality with backend
+  };
 
-  // Get block explorer URL based on chain ID
-  const getBlockExplorerUrl = () => {
-    if (!event.id || !chainId) return '#';
+  // Share event
+  const shareEvent = (e) => {
+    e.stopPropagation();
+    const shareData = {
+      title: eventData.title,
+      text: `Check out this event: ${eventData.title}`,
+      url: window.location.origin + `/events/${eventData.id}`,
+    };
     
-    // This is a simplified version - you might want to support more networks
-    switch (chainId) {
-      case 1: // Ethereum Mainnet
-        return `https://etherscan.io/`;
-      case 5: // Goerli Testnet
-        return `https://goerli.etherscan.io/`;
-      case 11155111: // Sepolia Testnet
-        return `https://sepolia.etherscan.io/`;
-      case 80001: // Polygon Mumbai
-        return `https://mumbai.polygonscan.com/`;
-      default: // Localhost/other
-        return '#';
+    if (navigator.share) {
+      navigator.share(shareData).catch(console.error);
+    } else {
+      // Fallback for browsers that don't support Web Share API
+      navigator.clipboard.writeText(shareData.url).then(() => {
+        alert('Link copied to clipboard!');
+      }).catch(console.error);
     }
+  };
+
+  // Handle card click
+  const handleClick = (e) => {
+    e.preventDefault();
+    onClick(eventData);
+    navigate(`/events/${eventData.id}`);
   };
 
   return (
-    <motion.div 
-      className="card h-full flex flex-col bg-gray-900/50 border border-gray-800 rounded-xl overflow-hidden hover:shadow-lg hover:shadow-deep-purple/20 transition-all duration-300"
-      whileHover={{ y: -5, scale: 1.02 }}
-      transition={{ duration: 0.3 }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+    <motion.article
+      onClick={handleClick}
+      className={`relative bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-md cursor-pointer group ${className} ${
+        isSelected ? 'ring-2 ring-blue-500' : 'hover:border-gray-300'
+      }`}
+      whileHover={{ y: -4 }}
+      layout
     >
-      <div className="relative h-48 overflow-hidden group">
-        <img 
-          src={event.image || `https://source.unsplash.com/random/600x400/?event,${event.id}`} 
-          alt={event.title || 'Event'} 
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+      {/* Image with hover overlay */}
+      <div className="relative h-48 overflow-hidden">
+        <img
+          src={imageError ? DEFAULT_EVENT_IMAGE : eventData.image}
+          alt={eventData.title}
+          onError={handleImageError}
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
-          <a 
-            href={getBlockExplorerUrl()}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center text-sm text-white bg-deep-purple/90 hover:bg-deep-purple px-3 py-1.5 rounded-full transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <span>View on Explorer</span>
-            <ExternalLink className="ml-1 h-3.5 w-3.5" />
-          </a>
-        </div>
-        <div className="absolute top-0 right-0 bg-deep-purple/90 text-white px-3 py-1.5 m-2 rounded-lg text-sm font-medium backdrop-blur-sm">
-          {formatPrice(event.price)}
-        </div>
-      </div>
-      
-      <div className="p-5 flex-1 flex flex-col">
-        <h3 className="text-xl font-bold text-holographic-white line-clamp-2 mb-2">
-          {event.title || 'Untitled Event'}
-        </h3>
         
-        <div className="space-y-2 text-holographic-white/70 text-sm mt-auto">
-          <div className="flex items-start space-x-2">
-            <Calendar className="h-4 w-4 text-tech-blue flex-shrink-0 mt-0.5" />
-            <span className="text-sm">{formattedDate || 'Date not specified'}</span>
-          </div>
-          
-          <div className="flex items-start space-x-2">
-            <MapPin className="h-4 w-4 text-tech-blue flex-shrink-0 mt-0.5" />
-            <span className="text-sm line-clamp-1">{event.location || 'Location not specified'}</span>
-          </div>
+        {/* Image overlay gradient */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        
+        {/* Price tag */}
+        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm text-gray-900 font-medium px-2.5 py-1 rounded-full text-sm shadow-md">
+          {formattedPrice.text}
         </div>
         
-        {event.ticketsAvailable !== undefined && (
-          <div className="flex items-center space-x-2">
-            <Users className="h-4 w-4 text-tech-blue flex-shrink-0" />
-            <span className="text-sm">
-              {event.ticketsAvailable} {event.ticketsAvailable === 1 ? 'ticket' : 'tickets'} available
+        {/* Favorite button */}
+        <button
+          onClick={toggleFavorite}
+          className={`absolute top-3 left-3 p-2 rounded-full backdrop-blur-sm transition-colors ${
+            isFavorite ? 'bg-red-100 text-red-500' : 'bg-white/80 text-gray-600 hover:bg-white/90'
+          }`}
+          aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <Heart className="h-4 w-4" fill={isFavorite ? 'currentColor' : 'none'} />
+        </button>
+        
+        {/* Category badge */}
+        <div className="absolute bottom-3 left-3">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            {eventData.category}
+          </span>
+        </div>
+        
+        {/* Event status badge */}
+        {eventStatus === 'today' && (
+          <div className="absolute bottom-3 right-3">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              Happening Today
             </span>
           </div>
         )}
         
-        {event.organizer && (
-          <div className="pt-2 mt-2 border-t border-gray-800">
-            <p className="text-xs text-gray-400">Organized by</p>
-            <div className="flex items-center mt-1">
-              <div className="h-6 w-6 rounded-full bg-deep-purple/30 flex items-center justify-center mr-2">
-                <User className="h-3 w-3 text-deep-purple" />
-              </div>
-              <span className="text-xs font-mono text-gray-300 truncate">
-                {`${event.organizer.substring(0, 6)}...${event.organizer.substring(38)}`}
-              </span>
-            </div>
+        {/* Share button - shown on hover */}
+        <motion.button
+          onClick={shareEvent}
+          className="absolute bottom-3 right-3 p-2 bg-white/90 backdrop-blur-sm rounded-full text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-white"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          aria-label="Share event"
+        >
+          <Share2 className="h-4 w-4" />
+        </motion.button>
+      </div>
+      
+      {/* Event details */}
+      <div className="p-4">
+        {/* Title and date */}
+        <div className="mb-3">
+          <h3 className="font-semibold text-gray-900 line-clamp-2 mb-1 group-hover:text-blue-600 transition-colors">
+            {eventData.title}
+          </h3>
+          
+          <div className="flex items-center text-sm text-gray-500">
+            <Calendar className="h-4 w-4 mr-1.5 flex-shrink-0" />
+            <span>{formattedDate.full}</span>
           </div>
-        )}
+        </div>
         
-        <div className="pt-4 mt-4 border-t border-gray-800">
-          <Link 
-            to={`/events/blockchain/${event.id}`} 
-            className="btn btn-primary w-full text-center flex items-center justify-center space-x-2"
-          >
-            <span>View Details</span>
-            {isHovered && <ArrowRight className="h-4 w-4" />}
-          </Link>
+        {/* Location */}
+        <div className="flex items-center text-sm text-gray-600 mb-3">
+          <MapPin className="h-4 w-4 mr-1.5 flex-shrink-0 text-gray-400" />
+          <span className="line-clamp-1">{eventData.location}</span>
+        </div>
+        
+        {/* Event stats */}
+        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+          <div className="flex items-center text-sm text-gray-500">
+            <Users className="h-4 w-4 mr-1.5" />
+            <span>{eventData.registered} {eventData.capacity ? `of ${eventData.capacity}` : ''} going</span>
+          </div>
+          
+          {eventData.rating > 0 && (
+            <div className="flex items-center text-sm text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+              <Star className="h-3.5 w-3.5 mr-1 fill-current" />
+              <span>{eventData.rating.toFixed(1)}</span>
+            </div>
+          )}
         </div>
       </div>
-    </motion.div>
+      
+      {/* Quick actions - shown on hover */}
+      <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-blue-500 to-purple-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+      
+      {/* Sold out or registration closed overlay */}
+      {eventData.capacity > 0 && eventData.registered >= eventData.capacity && (
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+          <span className="bg-white text-red-600 font-medium px-3 py-1 rounded-full text-sm">
+            Sold Out
+          </span>
+        </div>
+      )}
+      
+      {eventStatus === 'past' && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+          <span className="bg-white/90 text-gray-800 font-medium px-3 py-1 rounded-full text-sm">
+            Event Ended
+          </span>
+        </div>
+      )}
+    </motion.article>
   );
 };
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Ticket, UserCircle, PlusCircle } from 'lucide-react';
+import { Home, Ticket, UserCircle, PlusCircle, Settings } from 'lucide-react';
 
 const UserSidebar = () => {
   const location = useLocation();
@@ -10,6 +10,7 @@ const UserSidebar = () => {
     { path: '/user/tickets', icon: Ticket, label: 'My Tickets' },
     { path: '/user/profile', icon: UserCircle, label: 'Profile' },
     { path: '/user/create-event', icon: PlusCircle, label: 'Create Event' },
+    { path: '/user/settings', icon: Settings, label: 'Settings' },
   ];
 
   return (
