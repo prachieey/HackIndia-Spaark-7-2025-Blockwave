@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Ticket, Clock, AlertCircle } from 'lucide-react';
+import { Calendar, Ticket, Clock, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useEvents } from '../../contexts/EventsContext';
 import { format } from 'date-fns';
+import { Link } from 'react-router-dom';
 
 const UserDashboardPage = () => {
   const { userTickets, pendingTickets } = useEvents();
@@ -35,7 +36,16 @@ const UserDashboardPage = () => {
       exit={{ opacity: 0, y: -20 }}
       className="space-y-6"
     >
-      <h1 className="text-3xl font-bold text-white">Welcome Back!</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-white">Welcome Back!</h1>
+        <Link 
+          to="/" 
+          className="flex items-center space-x-1 text-gray-400 hover:text-white transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5" />
+          <span>Back to Home</span>
+        </Link>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {stats.map((stat, index) => {

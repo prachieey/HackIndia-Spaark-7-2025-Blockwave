@@ -116,7 +116,7 @@ const AuthModal = ({ isOpen, onClose, authType, setAuthType }) => {
                     onChange={handleChange}
                     required={authType === 'signup'}
                     className="input w-full"
-                    placeholder="Your name"
+                    placeholder=""
                   />
                 </div>
               )}
@@ -133,7 +133,7 @@ const AuthModal = ({ isOpen, onClose, authType, setAuthType }) => {
                   onChange={handleChange}
                   required
                   className="input w-full"
-                  placeholder="your@email.com"
+                  placeholder=""
                 />
               </div>
 
@@ -149,7 +149,7 @@ const AuthModal = ({ isOpen, onClose, authType, setAuthType }) => {
                   onChange={handleChange}
                   required
                   className="input w-full"
-                  placeholder="••••••••"
+                  placeholder=""
                   minLength={6}
                 />
               </div>

@@ -21,6 +21,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
+    console.log('Login attempt with:', { email });
     try {
       await new Promise(resolve => setTimeout(resolve, 1000));
       
@@ -33,6 +34,7 @@ export const AuthProvider = ({ children }) => {
           role: 'admin',
           createdAt: new Date().toISOString()
         };
+        console.log('Admin login successful, setting user:', adminUser);
         setUser(adminUser);
         localStorage.setItem('scantyx_user', JSON.stringify(adminUser));
         return { success: true };
@@ -76,13 +78,35 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('scantyx_user', JSON.stringify(mockUser));
       return { success: true };
     } catch (error) {
+      console.error('Error during signup:', error);
       return { success: false, error: error.message || 'Failed to sign up' };
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('scantyx_user');
+  const logout = async () => {
+    console.log('Logout initiated');
+    try {
+      // Clear any active web3 connections
+      if (window.ethereum?.removeListener) {
+        window.ethereum.removeListener('accountsChanged', () => {});
+        window.ethereum.removeListener('chainChanged', () => {});
+      }
+      
+      // Clear user data
+      console.log('Clearing user data');
+      setUser(null);
+      localStorage.removeItem('scantyx_user');
+      
+      // Clear any additional auth tokens or session data
+      localStorage.removeItem('auth_token');
+      sessionStorage.clear();
+      
+      console.log('Logout successful');
+      return { success: true };
+    } catch (error) {
+      console.error('Error during logout:', error);
+      return { success: false, error: error.message };
+    }
   };
 
   const value = {
@@ -94,6 +118,16 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin'
   };
+
+  // Debug: Log when auth state changes
+  useEffect(() => {
+    console.log('Auth state updated:', {
+      user,
+      isAuthenticated: !!user,
+      isAdmin: user?.role === 'admin',
+      loading
+    });
+  }, [user, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

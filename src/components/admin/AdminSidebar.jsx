@@ -1,14 +1,41 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Calendar, Ticket, Users, Settings } from 'lucide-react';
 
 const AdminSidebar = () => {
+  const location = useLocation();
+  
   const navItems = [
-    { path: '/admin', icon: <LayoutDashboard size={20} />, label: 'Dashboard' },
-    { path: '/admin/events', icon: <Calendar size={20} />, label: 'Events' },
-    { path: '/admin/tickets', icon: <Ticket size={20} />, label: 'Tickets' },
-    { path: '/admin/users', icon: <Users size={20} />, label: 'Users' },
-    { path: '/admin/settings', icon: <Settings size={20} />, label: 'Settings' },
+    { 
+      path: '/admin', 
+      icon: <LayoutDashboard size={20} />, 
+      label: 'Dashboard',
+      exact: true
+    },
+    { 
+      path: '/admin/events', 
+      icon: <Calendar size={20} />, 
+      label: 'Events',
+      exact: false
+    },
+    { 
+      path: '/admin/tickets', 
+      icon: <Ticket size={20} />, 
+      label: 'Tickets',
+      exact: false
+    },
+    { 
+      path: '/admin/users', 
+      icon: <Users size={20} />, 
+      label: 'Users',
+      exact: false
+    },
+    { 
+      path: '/admin/settings', 
+      icon: <Settings size={20} />, 
+      label: 'Settings',
+      exact: false
+    },
   ];
 
   return (
@@ -22,11 +49,18 @@ const AdminSidebar = () => {
           <NavLink
             key={item.path}
             to={item.path}
-            className={({ isActive }) =>
-              `flex items-center px-6 py-3 text-gray-300 hover:bg-gray-800 transition-colors ${
-                isActive ? 'bg-gray-800 border-l-4 border-blue-500' : ''
-              }`
-            }
+            className={({ isActive }) => {
+              // Special handling for the dashboard to match exactly
+              const isDashboard = item.path === '/admin';
+              const isActiveRoute = isDashboard 
+                ? location.pathname === '/admin' || location.pathname === '/admin/'
+                : isActive;
+              
+              return `flex items-center px-6 py-3 text-gray-300 hover:bg-gray-800 transition-colors ${
+                isActiveRoute ? 'bg-gray-800 border-l-4 border-blue-500' : ''
+              }`;
+            }}
+            end={item.exact}
           >
             {item.icon}
             <span className="ml-3">{item.label}</span>

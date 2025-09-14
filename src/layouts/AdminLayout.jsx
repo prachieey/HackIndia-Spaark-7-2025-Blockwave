@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import AdminSidebar from '../components/admin/AdminSidebar.jsx';
@@ -6,17 +6,37 @@ import AdminHeader from '../components/admin/AdminHeader.jsx';
 import { useAuth } from '../contexts/AuthContext';
 
 const AdminLayout = () => {
-  const { isAuthenticated, isAdmin } = useAuth();
+  const { isAuthenticated, isAdmin, loading } = useAuth();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isAuthenticated || !isAdmin) {
-      navigate('/');
+    console.log('Auth state changed:', { isAuthenticated, isAdmin, loading });
+    
+    if (loading) return;
+    
+    if (!isAuthenticated) {
+      console.log('Not authenticated, redirecting to login');
+      navigate('/login', { 
+        state: { from: window.location.pathname },
+        replace: true 
+      });
+    } else if (!isAdmin) {
+      console.log('Not an admin, redirecting to home');
+      navigate('/', { replace: true });
+    } else {
+      console.log('User is authenticated and is admin');
     }
-  }, [isAuthenticated, isAdmin, navigate]);
+    
+    setIsCheckingAuth(false);
+  }, [isAuthenticated, isAdmin, loading, navigate]);
 
-  if (!isAuthenticated || !isAdmin) {
-    return null;
+  if (loading || isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
 
   return (

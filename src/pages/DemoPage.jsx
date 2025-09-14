@@ -12,28 +12,6 @@ const DemoPage = () => {
   const [scanInput, setScanInput] = useState('');
   const [scanResult, setScanResult] = useState(null);
   const [resaleTickets, setResaleTickets] = useState([
-    {
-      id: 'tkt_demo1',
-      eventId: 'evt_1',
-      eventTitle: 'TechFest 2025',
-      purchaseDate: new Date().toISOString(),
-      price: 1499,
-      resalePrice: 1299,
-      qrData: 'SCANTYX-evt_1-demo1',
-      isUsed: false,
-      isForSale: true
-    },
-    {
-      id: 'tkt_demo2',
-      eventId: 'evt_2',
-      eventTitle: 'Music Fusion Festival',
-      purchaseDate: new Date().toISOString(),
-      price: 999,
-      resalePrice: 899,
-      qrData: 'SCANTYX-evt_2-demo2',
-      isUsed: false,
-      isForSale: true
-    }
   ]);
   
   const handleScan = () => {
@@ -65,11 +43,6 @@ const DemoPage = () => {
       return;
     }
     
-    // For demo tickets, just remove from resale list
-    if (ticketId.startsWith('tkt_demo')) {
-      setResaleTickets(prev => prev.filter(t => t.id !== ticketId));
-      return;
-    }
     
     // For user tickets, use the context function
     const result = purchaseResaleTicket(ticketId);
@@ -172,7 +145,7 @@ const DemoPage = () => {
                     value={scanInput}
                     onChange={(e) => setScanInput(e.target.value)}
                     className="input flex-1"
-                    placeholder="e.g., SCANTYX-evt_1-abc123"
+                    placeholder=""
                   />
                   <button
                     onClick={handleScan}
@@ -181,9 +154,6 @@ const DemoPage = () => {
                     Validate
                   </button>
                 </div>
-                <p className="text-xs text-holographic-white/50">
-                  For demo: Try entering "SCANTYX-evt_1-demo1" or scan a QR code from your tickets
-                </p>
               </div>
               
               {scanResult && (

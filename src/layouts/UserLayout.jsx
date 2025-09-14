@@ -10,13 +10,20 @@ const UserLayout = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!isAuthenticated || isAdmin) {
-      navigate('/');
+    if (!isAuthenticated) {
+      navigate('/login', { state: { from: window.location.pathname } });
+    } else if (isAdmin) {
+      // If admin is trying to access user routes, redirect to admin
+      navigate('/admin');
     }
   }, [isAuthenticated, isAdmin, navigate]);
 
   if (!isAuthenticated || isAdmin) {
-    return null;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
 
   return (

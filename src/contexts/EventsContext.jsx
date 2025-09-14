@@ -13,87 +13,8 @@ export const formatPrice = (price) => {
   }).format(price);
 };
 
-// Mock event data
-const mockEvents = [
-  {
-    id: 'evt_1',
-    title: 'TechFest 2025',
-    description: 'The biggest tech conference in India featuring the latest innovations and industry leaders.',
-    date: '2025-03-15T09:00:00',
-    location: 'Bangalore International Exhibition Centre',
-    price: 1499,
-    image: 'https://images.pexels.com/photos/2774556/pexels-photo-2774556.jpeg',
-    organizer: 'TechCorp India',
-    availableTickets: 250,
-    category: 'Technology',
-    status: 'approved'
-  },
-  {
-    id: 'evt_2',
-    title: 'Music Fusion Festival',
-    description: 'Experience the blend of classical and modern music with top artists from around the country.',
-    date: '2025-04-22T18:30:00',
-    location: 'JLN Stadium, Delhi',
-    price: 999,
-    image: 'https://images.pexels.com/photos/1105666/pexels-photo-1105666.jpeg',
-    organizer: 'Harmony Productions',
-    availableTickets: 500,
-    category: 'Music',
-    status: 'approved'
-  },
-  {
-    id: 'evt_3',
-    title: 'Startup Summit 2025',
-    description: 'Connect with investors, entrepreneurs and innovators at this premier startup event.',
-    date: '2025-05-10T10:00:00',
-    location: 'Hyderabad Convention Centre',
-    price: 2499,
-    image: 'https://images.pexels.com/photos/2182973/pexels-photo-2182973.jpeg',
-    organizer: 'Venture Network',
-    availableTickets: 150,
-    category: 'Business',
-    status: 'approved'
-  },
-  {
-    id: 'evt_4',
-    title: 'Culinary Masterclass',
-    description: 'Learn from celebrity chefs and discover the secrets of Indian and international cuisines.',
-    date: '2025-06-05T11:00:00',
-    location: 'Grand Hyatt, Mumbai',
-    price: 3999,
-    image: 'https://images.pexels.com/photos/1267320/pexels-photo-1267320.jpeg',
-    organizer: 'Gourmet India',
-    availableTickets: 75,
-    category: 'Food',
-    status: 'approved'
-  },
-  {
-    id: 'evt_5',
-    title: 'Yoga & Wellness Retreat',
-    description: 'A weekend of mindfulness, yoga, and holistic wellness practices in a serene environment.',
-    date: '2025-07-18T08:00:00',
-    location: 'Rishikesh Retreat Centre',
-    price: 5999,
-    image: 'https://images.pexels.com/photos/4056535/pexels-photo-4056535.jpeg',
-    organizer: 'Mindful Living',
-    availableTickets: 40,
-    category: 'Wellness',
-    status: 'approved'
-  },
-  {
-    id: 'evt_6',
-    title: 'Digital Marketing Conference',
-    description: 'Stay ahead of the curve with insights from digital marketing experts and industry leaders.',
-    date: '2025-08-12T09:30:00',
-    location: 'Leela Palace, Chennai',
-    price: 1799,
-    image: 'https://images.pexels.com/photos/3184418/pexels-photo-3184418.jpeg',
-    organizer: 'DigitalEdge',
-    availableTickets: 200,
-    category: 'Marketing',
-    status: 'approved'
-  }
-];
+// Production: No mock event data
+const mockEvents = [];
 
 export const EventsProvider = ({ children }) => {
   const [events, setEvents] = useState([]);
@@ -105,7 +26,7 @@ export const EventsProvider = ({ children }) => {
     const fetchEvents = async () => {
       try {
         await new Promise(resolve => setTimeout(resolve, 1000));
-        setEvents(mockEvents);
+        setEvents([]);
         
         const storedTickets = localStorage.getItem('scantyx_user_tickets');
         if (storedTickets) {

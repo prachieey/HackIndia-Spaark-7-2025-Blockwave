@@ -137,7 +137,7 @@ const ContactPage = () => {
                       onChange={handleChange}
                       required
                       className="input w-full"
-                      placeholder="Your name"
+                      placeholder=""
                     />
                   </div>
                   
@@ -153,7 +153,7 @@ const ContactPage = () => {
                       onChange={handleChange}
                       required
                       className="input w-full"
-                      placeholder="your@email.com"
+                      placeholder=""
                     />
                   </div>
                   
@@ -169,7 +169,7 @@ const ContactPage = () => {
                       required
                       rows={5}
                       className="input w-full"
-                      placeholder="How can we help you?"
+                      placeholder=""
                     ></textarea>
                   </div>
                   

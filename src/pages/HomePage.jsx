@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { QrCode, Shield, Repeat, CreditCard, ChevronRight } from 'lucide-react';
+import { QrCode, Shield, Repeat, CreditCard, ChevronRight, Star } from 'lucide-react';
 import { useEvents } from '../contexts/EventsContext';
 import { useAuth } from '../contexts/AuthContext';
 import EventCard from '../components/events/EventCard';
 import QRTicket from '../components/tickets/QRTicket';
+import TestimonialsSection from '../components/testimonials/TestimonialsSection';
 
 const HomePage = () => {
   const { openAuthModal } = useOutletContext();
@@ -229,6 +230,9 @@ const HomePage = () => {
               <EventCard key={event.id} event={event} />
             ))}
           </div>
+          
+          {/* Testimonials Section */}
+          <TestimonialsSection />
         </div>
       </section>
 
@@ -254,9 +258,6 @@ const HomePage = () => {
             
             {resellableTickets.length > 2 && (
               <div className="text-center mt-8">
-                <Link to="/demo" className="btn btn-secondary">
-                  View All Tickets
-                </Link>
               </div>
             )}
           </div>
@@ -270,9 +271,6 @@ const HomePage = () => {
           <p className="tagline mb-8">No Scams, Just Scans</p>
           
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link to="/demo" className="btn btn-primary">
-              Try Demo
-            </Link>
             <Link to="/explore" className="btn btn-secondary">
               Browse Events
             </Link>

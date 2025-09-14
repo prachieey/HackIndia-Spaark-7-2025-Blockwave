@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { QrCode, Menu, X, LogIn, UserPlus, User, Shield } from 'lucide-react';
+import { QrCode, Menu, X, LogIn, UserPlus, User, Shield, LogOut, UserCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import WalletConnect from './wallet/WalletConnect';
 
 const Navbar = ({ openAuthModal }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -19,6 +21,22 @@ const Navbar = ({ openAuthModal }) => {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isMenuOpen && !event.target.closest('.mobile-menu-button')) {
+        setIsMenuOpen(false);
+      }
+      if (isProfileOpen && !event.target.closest('.profile-menu-button')) {
+        setIsProfileOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen, isProfileOpen]);
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
   const closeMenu = () => setIsMenuOpen(false);
@@ -52,66 +70,88 @@ const Navbar = ({ openAuthModal }) => {
         </Link>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center space-x-8">
+        <div className="hidden md:flex items-center space-x-6">
           {navLinks.map((link) => (
             <Link
               key={link.path}
               to={link.path}
-              className={`text-holographic-white hover:text-tech-blue transition-colors ${
-                location.pathname === link.path ? 'font-bold text-tech-blue' : ''
+              className={`text-sm font-medium transition-colors ${
+                location.pathname === link.path
+                  ? 'text-deep-purple'
+                  : 'text-gray-300 hover:text-white'
               }`}
               onClick={closeMenu}
             >
               {link.name}
             </Link>
           ))}
-        </nav>
+        </div>
 
-        {/* Auth Buttons - Desktop */}
-        <div className="hidden md:flex items-center space-x-4">
+        <div className="hidden md:flex items-center space-x-6">
+          {/* Wallet Connect Button */}
+          <WalletConnect />
+          
           {user ? (
-            <>
-              {isAdmin ? (
-                <Link 
-                  to="/admin" 
-                  className="flex items-center space-x-1 text-holographic-white hover:text-tech-blue transition-colors"
-                >
-                  <Shield className="h-4 w-4" />
-                  <span>Admin Panel</span>
-                </Link>
-              ) : (
-                <Link 
-                  to="/user" 
-                  className="flex items-center space-x-1 text-holographic-white hover:text-tech-blue transition-colors"
-                >
-                  <User className="h-4 w-4" />
-                  <span>Dashboard</span>
-                </Link>
-              )}
-              <button
-                onClick={handleLogout}
-                className="text-holographic-white hover:text-tech-blue transition-colors"
+            <div className="relative border-l border-gray-700 pl-6">
+              <button 
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                className="flex items-center space-x-2 focus:outline-none"
               >
-                Logout
+                <div className="relative">
+                  <UserCircle className="h-10 w-10 text-gray-300 hover:text-white transition-colors" />
+                </div>
               </button>
-            </>
+              
+              {/* Dropdown Menu */}
+              {isProfileOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-md shadow-lg py-1 z-50">
+                  <Link
+                    to="/user"
+                    className="flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                    onClick={() => setIsProfileOpen(false)}
+                  >
+                    <User className="h-4 w-4 mr-2" />
+                    <span>Dashboard</span>
+                  </Link>
+                  {isAdmin && (
+                    <Link
+                      to="/admin/dashboard"
+                      className="flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"
+                      onClick={() => setIsProfileOpen(false)}
+                    >
+                      <Shield className="h-4 w-4 mr-2" />
+                      <span>Admin Panel</span>
+                    </Link>
+                  )}
+                  <button
+                    onClick={() => {
+                      handleLogout();
+                      setIsProfileOpen(false);
+                    }}
+                    className="w-full text-left flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-red-400"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
-            <>
+            <div className="flex items-center space-x-3 border-l border-gray-700 pl-6">
               <button
                 onClick={() => openAuthModal('signin')}
-                className="flex items-center space-x-1 text-holographic-white hover:text-tech-blue transition-colors"
+                className="flex items-center space-x-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
               >
-                <LogIn className="h-4 w-4" />
+                <LogIn className="h-5 w-5" />
                 <span>Sign In</span>
               </button>
               <button
                 onClick={() => openAuthModal('signup')}
-                className="btn btn-primary flex items-center space-x-1"
+                className="px-4 py-2 rounded-lg bg-deep-purple text-white text-sm font-medium hover:bg-purple-700 transition-colors"
               >
-                <UserPlus className="h-4 w-4" />
-                <span>Sign Up</span>
+                Sign Up
               </button>
-            </>
+            </div>
           )}
         </div>
 
@@ -148,43 +188,43 @@ const Navbar = ({ openAuthModal }) => {
             ))}
             
             {user ? (
-              <>
-                {isAdmin ? (
+              <div className="pt-2 border-t border-gray-700">
+                <Link 
+                  to="/user" 
+                  className="flex items-center space-x-2 text-holographic-white hover:text-tech-blue transition-colors py-2"
+                  onClick={closeMenu}
+                >
+                  <User className="h-5 w-5" />
+                  <span>Dashboard</span>
+                </Link>
+                {isAdmin && (
                   <Link 
-                    to="/admin" 
-                    className="flex items-center space-x-1 text-holographic-white hover:text-tech-blue transition-colors py-2"
+                    to="/admin/dashboard" 
+                    className="flex items-center space-x-2 text-holographic-white hover:text-tech-blue transition-colors py-2"
                     onClick={closeMenu}
                   >
-                    <Shield className="h-4 w-4" />
+                    <Shield className="h-5 w-5" />
                     <span>Admin Panel</span>
-                  </Link>
-                ) : (
-                  <Link 
-                    to="/user" 
-                    className="flex items-center space-x-1 text-holographic-white hover:text-tech-blue transition-colors py-2"
-                    onClick={closeMenu}
-                  >
-                    <User className="h-4 w-4" />
-                    <span>Dashboard</span>
                   </Link>
                 )}
                 <button
                   onClick={handleLogout}
-                  className="text-holographic-white hover:text-tech-blue transition-colors py-2 w-full text-left"
+                  className="w-full text-left flex items-center space-x-2 text-holographic-white hover:text-red-400 transition-colors py-2"
                 >
-                  Logout
+                  <LogOut className="h-5 w-5" />
+                  <span>Logout</span>
                 </button>
-              </>
+              </div>
             ) : (
-              <>
+              <div className="pt-2 border-t border-gray-700 space-y-3">
                 <button
                   onClick={() => {
                     openAuthModal('signin');
                     closeMenu();
                   }}
-                  className="flex items-center space-x-1 text-holographic-white hover:text-tech-blue transition-colors py-2"
+                  className="w-full flex items-center space-x-2 text-holographic-white hover:text-tech-blue transition-colors py-2"
                 >
-                  <LogIn className="h-4 w-4" />
+                  <LogIn className="h-5 w-5" />
                   <span>Sign In</span>
                 </button>
                 <button
@@ -192,12 +232,12 @@ const Navbar = ({ openAuthModal }) => {
                     openAuthModal('signup');
                     closeMenu();
                   }}
-                  className="btn btn-primary flex items-center justify-center space-x-1"
+                  className="w-full flex items-center justify-center space-x-2 bg-deep-purple text-white rounded-lg py-2 px-4 hover:bg-purple-700 transition-colors"
                 >
-                  <UserPlus className="h-4 w-4" />
+                  <UserPlus className="h-5 w-5" />
                   <span>Sign Up</span>
                 </button>
-              </>
+              </div>
             )}
           </div>
         </motion.div>

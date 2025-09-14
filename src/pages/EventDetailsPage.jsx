@@ -259,9 +259,6 @@ const EventDetailsPage = () => {
             </div>
             
             <div className="space-y-4">
-              <Link to="/demo" className="btn btn-primary w-full block text-center">
-                View My Tickets
-              </Link>
               <button
                 onClick={() => setShowPurchaseSuccess(false)}
                 className="btn btn-secondary w-full"
