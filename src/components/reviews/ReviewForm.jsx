@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { X } from 'lucide-react';
+import { X, Star, Loader2 } from 'lucide-react';
 import PropTypes from 'prop-types';
-import StarRating from './StarRating';
 import { createReview, updateReview } from '../../services/reviewService';
 import { Button } from '../ui/button';
+import { motion } from 'framer-motion';
 
 const ReviewForm = ({ eventId, user, existingReview, onSuccess, onCancel }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rating, setRating] = useState(existingReview?.rating || 0);
+  const [hoverRating, setHoverRating] = useState(0);
+  
   const { 
     register, 
     handleSubmit, 
@@ -25,6 +27,31 @@ const ReviewForm = ({ eventId, user, existingReview, onSuccess, onCancel }) => {
   
   const isEditing = !!existingReview;
   const reviewContent = watch('review', '');
+  
+  // Star rating component
+  const StarRating = ({ rating, onRatingChange, readOnly = false, size = 24 }) => (
+    <div className="flex">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const fill = star <= (hoverRating || rating) ? 'fill-current text-yellow-400' : 'text-gray-400';
+        return (
+          <button
+            key={star}
+            type="button"
+            className={`${!readOnly ? 'cursor-pointer' : 'cursor-default'} p-1`}
+            onClick={() => !readOnly && onRatingChange(star)}
+            onMouseEnter={() => !readOnly && setHoverRating(star)}
+            onMouseLeave={() => !readOnly && setHoverRating(0)}
+            disabled={readOnly || isSubmitting}
+          >
+            <Star 
+              className={`${fill} ${star <= (hoverRating || rating) ? 'text-yellow-400' : 'text-gray-400'}`} 
+              size={size} 
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
 
   useEffect(() => {
     if (existingReview) {
@@ -45,75 +72,92 @@ const ReviewForm = ({ eventId, user, existingReview, onSuccess, onCancel }) => {
         ...data,
         rating,
         event: eventId,
-        user: user._id
+        user: user._id,
+        userName: user.name,
+        userEmail: user.email
       };
 
       if (existingReview) {
         await updateReview(existingReview._id, reviewData);
-        toast.success('Review updated successfully');
+        toast.success('Review updated successfully!', {
+          position: "top-center",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+        });
       } else {
         await createReview(reviewData);
-        toast.success('Thank you for your review!');
+        toast.success('Thank you for your review!', {
+          position: "top-center",
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+        });
       }
       
+      // Reset form
       reset();
       setRating(0);
-      if (onSuccess) onSuccess();
+      
+      // Call the onSuccess callback to update parent component
+      if (onSuccess) {
+        await onSuccess(reviewData);
+      }
     } catch (error) {
       console.error('Error submitting review:', error);
-      toast.error(error.response?.data?.message || 'Failed to submit review');
+      toast.error(error.response?.data?.message || 'Failed to submit review. Please try again.', {
+        position: "top-center",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md relative">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">
-          {isEditing ? 'Update Your Review' : 'Write a Review'}
-        </h3>
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Close form"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        )}
-      </div>
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-3">Your Rating</label>
-          <div className="flex items-center">
+    <div className="relative">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <div>
+          <label className="block text-holographic-white/80 text-sm font-medium mb-2">
+            Your Rating <span className="text-flame-red">*</span>
+          </label>
+          <div className="flex items-center space-x-2">
             <StarRating 
               rating={rating} 
               onRatingChange={setRating}
               readOnly={isSubmitting}
               size={28}
             />
-            <span className="ml-3 text-gray-600 text-sm">
+            <span className="text-holographic-white/60 text-sm">
               {rating > 0 ? `${rating} out of 5` : 'Tap to rate'}
             </span>
           </div>
-          {!rating && errors.rating && (
-            <p className="mt-1 text-sm text-red-600">Please select a rating</p>
+          {!rating && (
+            <p className="mt-1 text-sm text-flame-red">Please select a rating</p>
           )}
         </div>
         
-        <div className="mb-6">
-          <label htmlFor="review" className="block text-gray-700 font-medium mb-3">
-            Your Review
+        <div>
+          <label htmlFor="review" className="block text-holographic-white/80 text-sm font-medium mb-2">
+            Your Review <span className="text-flame-red">*</span>
           </label>
           <div className="relative">
             <textarea
               id="review"
-              rows="5"
-              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-                errors.review ? 'border-red-500' : 'border-gray-300 hover:border-gray-400'
-              }`}
+              rows="4"
+              className={`w-full px-4 py-3 bg-space-black/50 border ${
+                errors.review ? 'border-flame-red' : 'border-deep-purple/30'
+              } rounded-lg focus:outline-none focus:ring-2 focus:ring-tech-blue/50 focus:border-transparent text-holographic-white placeholder-holographic-white/40 transition-all duration-200`}
               placeholder="Share your experience at this event..."
               {...register('review', { 
                 required: 'Review is required',
@@ -124,46 +168,65 @@ const ReviewForm = ({ eventId, user, existingReview, onSuccess, onCancel }) => {
             />
             <div className="flex justify-between mt-1">
               {errors.review ? (
-                <p className="text-sm text-red-600">{errors.review.message}</p>
+                <p className="text-sm text-flame-red">{errors.review.message}</p>
               ) : (
                 <div></div>
               )}
-              <span className="text-xs text-gray-500">
-                {reviewContent?.length || 0}/2000 characters
+              <span className={`text-xs ${reviewContent?.length > 2000 ? 'text-flame-red' : 'text-holographic-white/40'}`}>
+                {reviewContent?.length || 0}/2000
               </span>
             </div>
           </div>
         </div>
         
-        <div className="flex justify-end space-x-3 mt-6">
+        <div className="flex items-center justify-end space-x-3 pt-2">
           {onCancel && (
             <Button
               type="button"
               variant="outline"
               onClick={onCancel}
               disabled={isSubmitting}
-              className="px-4 py-2"
+              className="px-4 py-2 border-holographic-white/20 text-holographic-white hover:bg-holographic-white/5"
             >
               Cancel
             </Button>
           )}
-          <Button
-            type="submit"
-            disabled={isSubmitting || rating === 0}
-            className={`${isSubmitting || rating === 0 ? 'opacity-70 cursor-not-allowed' : ''}`}
+          <motion.div
+            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: 1.02 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 10 }}
           >
-            {isSubmitting ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                {isEditing ? 'Updating...' : 'Submitting...'}
-              </>
-            ) : isEditing ? 'Update Review' : 'Submit Review'}
-          </Button>
+            <Button
+              type="submit"
+              disabled={isSubmitting || rating === 0 || reviewContent?.length < 10}
+              className={`px-6 py-2.5 font-medium ${
+                isSubmitting || rating === 0 || reviewContent?.length < 10 
+                  ? 'bg-deep-purple/30 text-holographic-white/50 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-tech-blue to-deep-purple hover:opacity-90 text-white'
+              } transition-all duration-200`}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {isEditing ? 'Updating...' : 'Submitting...'}
+                </>
+              ) : isEditing ? 'Update Review' : 'Submit Review'}
+            </Button>
+          </motion.div>
         </div>
       </form>
+      
+      {/* Form submission status */}
+      {isSubmitting && (
+        <div className="absolute inset-0 bg-space-black/70 backdrop-blur-sm rounded-lg flex items-center justify-center">
+          <div className="text-center p-4">
+            <Loader2 className="h-8 w-8 text-tech-blue animate-spin mx-auto mb-2" />
+            <p className="text-holographic-white/80 text-sm">
+              {isEditing ? 'Updating your review...' : 'Submitting your review...'}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

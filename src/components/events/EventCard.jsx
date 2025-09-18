@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { useWeb3 } from '../../contexts/blockchain/Web3Context';
 import { useAuth } from '../../contexts/AuthContext';
 import { format, parseISO, isPast, isToday, isTomorrow, isThisWeek } from 'date-fns';
-import { ethers } from 'ethers';
+import { formatEther } from 'ethers';
 
 // Default event image
 const DEFAULT_EVENT_IMAGE = 'https://images.unsplash.com/photo-1531058020387-3be344556be6?ixlib=rb-4.0.3&auto=format&fit=crop&w=1470&q=80';
@@ -18,27 +18,48 @@ const EventCard = ({
 }) => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { formatEther } = ethers.utils;
   const { chainId } = useWeb3();
   const [isFavorite, setIsFavorite] = useState(false);
   const [imageError, setImageError] = useState(false);
   
   // Parse event data
-  const eventData = useMemo(() => ({
-    ...event,
-    id: event._id || event.id || 'no-id',
-    title: event.name || event.title || 'Untitled Event',
-    description: event.description || 'No description available.',
-    image: event.image || event.coverImage || DEFAULT_EVENT_IMAGE,
-    date: event.date || event.startDate,
-    location: event.location?.name || event.venue || 'Location not specified',
-    price: event.price || event.ticketPrice || 0,
-    category: event.category || 'Other',
-    capacity: event.capacity || event.maxAttendees || 0,
-    registered: event.attendees?.length || 0,
-    isFree: !event.price && !event.ticketPrice,
-    rating: event.rating || 0
-  }), [event]);
+  const eventData = useMemo(() => {
+    // Helper function to safely get location string
+    const getLocationString = (location) => {
+      if (!location) return 'Location not specified';
+      
+      // If it's a string, return it directly
+      if (typeof location === 'string') return location;
+      
+      // If it's an object, try to construct a meaningful string
+      if (typeof location === 'object') {
+        if (location.name) return location.name;
+        if (location.address) return location.address;
+        if (location.city) return location.city;
+        
+        // If we have coordinates, return a generic location text
+        if (location.coordinates) return 'See event for location';
+      }
+      
+      return 'Location not specified';
+    };
+    
+    return {
+      ...event,
+      id: event._id || event.id || 'no-id',
+      title: event.name || event.title || 'Untitled Event',
+      description: event.description || 'No description available.',
+      image: event.image || event.coverImage || DEFAULT_EVENT_IMAGE,
+      date: event.date || event.startDate,
+      location: getLocationString(event.location || event.venue),
+      price: event.price || event.ticketPrice || 0,
+      category: event.category || 'Other',
+      capacity: event.capacity || event.maxAttendees || 0,
+      registered: event.attendees?.length || 0,
+      isFree: !event.price && !event.ticketPrice,
+      rating: event.rating || 0
+    };
+  }, [event]);
 
   // Format date and time
   const formattedDate = useMemo(() => {

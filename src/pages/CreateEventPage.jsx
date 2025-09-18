@@ -21,8 +21,8 @@ const CreateEventPage = () => {
     setSuccess(true);
     // Navigate to events page after a short delay
     setTimeout(() => {
-      navigate('/explore');
-    }, 2000);
+      navigate('/explore', { state: { showSuccessMessage: true } });
+    }, 1500);
   };
   
   // Sample images for selection

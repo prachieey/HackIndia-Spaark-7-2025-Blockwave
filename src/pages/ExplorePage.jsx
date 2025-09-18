@@ -1,18 +1,36 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Sliders, X, Map, List } from 'lucide-react';
+import { MapPin, Sliders, X, Map, List, CheckCircle } from 'lucide-react';
 import { parseISO, isWithinInterval } from 'date-fns';
 import EventFilters from '../components/events/EventFilters';
 import EventMapView from '../components/events/EventMapView';
 import EventCard from '../components/events/EventCard';
 import { useEvents } from '../contexts/EventsContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const ExplorePage = () => {
   const { events, loading, refreshEvents } = useEvents();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // State for success message
+  const [showSuccess, setShowSuccess] = useState(false);
+  
+  // Show success message if redirected from event creation
+  useEffect(() => {
+    if (location.state?.showSuccessMessage) {
+      setShowSuccess(true);
+      const timer = setTimeout(() => {
+        setShowSuccess(false);
+        // Clear the location state
+        navigate(location.pathname, { replace: true, state: {} });
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [location.state, navigate]);
   
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -178,6 +196,21 @@ const ExplorePage = () => {
   return (
     <div className="min-h-screen bg-gray-50 pt-20 pb-16">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Success Message */}
+        <AnimatePresence>
+          {showSuccess && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="mb-6 p-4 bg-green-900/30 border border-green-800 rounded-lg text-green-400 flex items-center"
+            >
+              <CheckCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+              <span>Your event has been created and listed successfully!</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Mobile Filters Toggle */}
         <div className="md:hidden flex items-center justify-between mb-6">
           <button

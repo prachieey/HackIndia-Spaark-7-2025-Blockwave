@@ -333,18 +333,43 @@ export const voidTicket = catchAsync(async (req, res, next) => {
 
 // Get current user's tickets
 export const getMyTickets = catchAsync(async (req, res, next) => {
-  const tickets = await Ticket.find({ owner: req.user.id })
-    .populate({
-      path: 'event',
-      select: 'title startDate venue bannerImage',
-    })
-    .sort('-createdAt');
+  try {
+    console.log('Fetching tickets for user:', {
+      userId: req.user?.id,
+      userEmail: req.user?.email
+    });
 
-  res.status(200).json({
-    status: 'success',
-    results: tickets.length,
-    data: {
-      tickets,
-    },
-  });
+    if (!req.user?.id) {
+      console.error('No user ID found in request');
+      return next(new AppError('User not authenticated', 401));
+    }
+
+    const tickets = await Ticket.find({ owner: req.user.id })
+      .populate({
+        path: 'event',
+        select: 'title startDate venue bannerImage',
+      })
+      .sort('-createdAt')
+      .lean(); // Convert to plain JavaScript objects
+
+    console.log(`Found ${tickets.length} tickets for user ${req.user.id}`);
+
+    res.status(200).json({
+      status: 'success',
+      results: tickets.length,
+      data: {
+        tickets,
+      },
+    });
+  } catch (error) {
+    console.error('Error in getMyTickets:', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Pass the error to the global error handler
+    next(error);
+  }
 });

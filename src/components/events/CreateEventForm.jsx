@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { useWeb3 } from '../../contexts/blockchain/Web3Context';
+import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-toastify';
+import { ethers } from 'ethers';
 
 export default function CreateEventForm({ onSuccess }) {
   const { createEvent, isConnected } = useWeb3();
+  const { currentUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -33,16 +36,88 @@ export default function CreateEventForm({ onSuccess }) {
     try {
       setLoading(true);
       
-      // Call the smart contract to create event
-      await createEvent(
-        formData.name,
-        formData.location,
-        formData.date,
-        formData.price,
-        parseInt(formData.ticketsAvailable)
+      // Convert date to Unix timestamp (seconds since epoch)
+      const dateTimestamp = Math.floor(new Date(formData.date).getTime() / 1000);
+      
+      // Convert price to wei (assuming price is in ETH)
+      const priceInWei = ethers.parseEther(formData.price);
+      
+      // First, create the event in the blockchain
+      const result = await createEvent(
+        formData.name,               // string name
+        formData.location,           // string location
+        dateTimestamp,               // uint256 date (Unix timestamp)
+        priceInWei,                  // uint256 price (in wei)
+        parseInt(formData.ticketsAvailable),  // uint256 ticketsAvailable
+        formData.description         // string description (optional)
       );
       
-      toast.success('Event created successfully on the blockchain!');
+      console.log('Blockchain event created:', result);
+      
+      // Create the event in our backend database
+      const eventData = {
+        title: formData.name,  // Ensure this matches your backend model
+        name: formData.name,
+        location: formData.location,
+        date: new Date(formData.date).toISOString(),
+        startDate: new Date(formData.date).toISOString(),
+        endDate: new Date(new Date(formData.date).getTime() + 2 * 60 * 60 * 1000).toISOString(), // 2 hours later
+        price: formData.price,
+        ticketsAvailable: parseInt(formData.ticketsAvailable),
+        description: formData.description,
+        organizer: currentUser?.id || currentUser?._id,
+        contractEventId: result.eventId,  // From blockchain
+        category: 'General',  // Default category
+        bannerImage: 'https://via.placeholder.com/1200x400',  // Default image
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        venue: {
+          name: formData.location,
+          address: formData.location,
+          city: '',
+          state: '',
+          country: '',
+          zipCode: ''
+        },
+        ticketTypes: [
+          {
+            name: 'General Admission',
+            price: parseFloat(formData.price),
+            quantity: parseInt(formData.ticketsAvailable),
+            description: 'General admission ticket',
+            saleStart: new Date().toISOString(),
+            saleEnd: new Date(formData.date).toISOString()
+          }
+        ],
+        blockchainTxHash: result.txHash,
+        // Add any additional fields needed for the event
+        // blockchainTxHash: receipt.transactionHash,
+        // blockchainEventId: eventId
+      };
+      
+      // Save the event to your backend/database
+      const token = await currentUser.getIdToken();
+      console.log('Saving event to backend:', eventData);
+      
+      const response = await fetch('http://localhost:5001/api/v1/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include',
+        body: JSON.stringify(eventData)
+      });
+      
+      const responseData = await response.json();
+      
+      if (!response.ok) {
+        console.error('Backend error:', responseData);
+        throw new Error(responseData.message || 'Failed to save event to database');
+      }
+      
+      console.log('Event saved to backend:', responseData);
+      
+      toast.success('Event created and listed successfully!');
       
       // Reset form
       setFormData({
@@ -54,6 +129,7 @@ export default function CreateEventForm({ onSuccess }) {
         description: ''
       });
       
+      // Call the success callback
       if (onSuccess) onSuccess();
       
     } catch (error) {

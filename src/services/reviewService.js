@@ -4,8 +4,21 @@ import { getCurrentUser } from './authService';
 const apiEndpoint = '/api/v1/reviews';
 
 export const getEventReviews = async (eventId, params = {}) => {
-  const response = await http.get(`${apiEndpoint}/event/${eventId}`, { params });
-  return response.data.data;
+  try {
+    const response = await http.get(`${apiEndpoint}/event/${eventId}`, { params });
+    // Handle different response formats
+    if (response?.data?.data) {
+      return Array.isArray(response.data.data) ? response.data.data : [response.data.data];
+    } else if (Array.isArray(response?.data)) {
+      return response.data;
+    } else if (Array.isArray(response)) {
+      return response;
+    }
+    return [];
+  } catch (error) {
+    console.error('Error fetching event reviews:', error);
+    return [];
+  }
 };
 
 export const createReview = async (reviewData) => {
@@ -40,6 +53,11 @@ export const getUserReviewForEvent = async (eventId) => {
 };
 
 export const getReviewStats = async (eventId) => {
-  const response = await http.get(`${apiEndpoint}/stats/event/${eventId}`);
-  return response.data.data;
+  try {
+    const response = await http.get(`${apiEndpoint}/stats/event/${eventId}`);
+    return response?.data?.data || { averageRating: 0, totalReviews: 0, ratingCounts: {} };
+  } catch (error) {
+    console.error('Error fetching review stats:', error);
+    return { averageRating: 0, totalReviews: 0, ratingCounts: {} };
+  }
 };

@@ -6,16 +6,21 @@ const reviewSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Review cannot be empty'],
       trim: true,
+      maxlength: [2000, 'A review must have less or equal than 2000 characters'],
+      minlength: [10, 'A review must have more or equal than 10 characters'],
     },
     rating: {
       type: Number,
-      min: 1,
-      max: 5,
+      min: [1, 'Rating must be at least 1'],
+      max: [5, 'Rating must be below or equal to 5'],
       required: [true, 'A review must have a rating'],
     },
     createdAt: {
       type: Date,
       default: Date.now,
+    },
+    updatedAt: {
+      type: Date,
     },
     event: {
       type: mongoose.Schema.ObjectId,
@@ -26,6 +31,23 @@ const reviewSchema = new mongoose.Schema(
       type: mongoose.Schema.ObjectId,
       ref: 'User',
       required: [true, 'Review must belong to a user'],
+    },
+    userName: {
+      type: String,
+      required: [true, 'Review must have a user name'],
+    },
+    userEmail: {
+      type: String,
+      required: [true, 'Review must have a user email'],
+      lowercase: true,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    helpfulCount: {
+      type: Number,
+      default: 0,
     },
   },
   {

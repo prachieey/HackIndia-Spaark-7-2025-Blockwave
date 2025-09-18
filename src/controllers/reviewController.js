@@ -4,11 +4,17 @@ import AppError from '../utils/appError.js';
 import catchAsync from '../utils/catchAsync.js';
 import APIFeatures from '../utils/apiFeatures.js';
 
-// Middleware to set event and user IDs
-export const setEventUserIds = (req, res, next) => {
+// Middleware to set event and user data
+export const setReviewUserData = (req, res, next) => {
   // Allow nested routes
   if (!req.body.event) req.body.event = req.params.eventId;
-  if (!req.body.user) req.body.user = req.user.id;
+  if (!req.body.user) {
+    req.body.user = req.user.id;
+    req.body.userName = req.user.name;
+    req.body.userEmail = req.user.email;
+  }
+  // Set updatedAt timestamp
+  req.body.updatedAt = Date.now();
   next();
 };
 
@@ -213,8 +219,13 @@ export const getReview = catchAsync(async (req, res, next) => {
 
 // Create a new review
 export const createReview = catchAsync(async (req, res, next) => {
-  const { rating, review, event } = req.body;
+  const { rating, review, event, userName, userEmail } = req.body;
   const userId = req.user.id;
+  
+  // Validate required fields
+  if (!rating || !review || !event || !userName || !userEmail) {
+    return next(new AppError('Please provide all required fields', 400));
+  }
 
   // 1) Check if the user has already reviewed the event
   const existingReview = await Review.findOne({ user: userId, event });
@@ -237,12 +248,16 @@ export const createReview = catchAsync(async (req, res, next) => {
     );
   }
 
-  // 3) Create the review
+  // 2) Create new review with all required fields
   const newReview = await Review.create({
-    review,
     rating,
+    review,
     event,
     user: userId,
+    userName,
+    userEmail,
+    isVerified: true, // Mark as verified since it's coming from authenticated user
+    updatedAt: Date.now()
   });
 
   res.status(201).json({
@@ -255,7 +270,44 @@ export const createReview = catchAsync(async (req, res, next) => {
 
 // Update a review
 export const updateReview = catchAsync(async (req, res, next) => {
-  const { rating, review } = req.body;
+  const { rating, review, isHelpful } = req.body;
+  
+  // Handle helpful count update
+  if (isHelpful !== undefined) {
+    const review = await Review.findById(req.params.id);
+    if (!review) {
+      return next(new AppError('No review found with that ID', 404));
+    }
+    
+    // Toggle helpful count (prevent duplicate votes in a real app)
+    review.helpfulCount += isHelpful ? 1 : -1;
+    await review.save();
+    
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        review
+      }
+    });
+  }
+  
+  // Regular review update
+  const updateData = { 
+    rating, 
+    review,
+    updatedAt: Date.now()
+  };
+  
+  // 1) Find review and update it
+  const updatedReview = await Review.findByIdAndUpdate(
+    req.params.id,
+    updateData,
+    {
+      new: true,
+      runValidators: true
+    }
+  );
+
   const reviewId = req.params.id;
   const userId = req.user.id;
 

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Slot } from '@radix-ui/react-slot';
 
 const Button = React.forwardRef(
   (
@@ -6,6 +7,7 @@ const Button = React.forwardRef(
       className = '',
       variant = 'default',
       size = 'default',
+      asChild = false,
       children,
       ...props
     },
@@ -29,16 +31,19 @@ const Button = React.forwardRef(
       icon: 'h-10 w-10',
     };
 
+    const Comp = asChild ? Slot : 'button';
+    const classes = `${baseStyles} ${variants[variant] || variants.default} ${
+      sizes[size] || sizes.default
+    } ${className}`;
+
     return (
-      <button
-        className={`${baseStyles} ${variants[variant] || variants.default} ${
-          sizes[size] || sizes.default
-        } ${className}`}
+      <Comp
+        className={classes}
         ref={ref}
         {...props}
       >
         {children}
-      </button>
+      </Comp>
     );
   }
 );

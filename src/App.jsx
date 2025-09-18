@@ -1,6 +1,9 @@
-import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
+import { Toaster } from 'react-hot-toast';
+import CustomToast from './components/common/CustomToast';
+import ErrorBoundary from './components/common/ErrorBoundary';
 
 // Layouts
 import MainLayout from './layouts/MainLayout.jsx';
@@ -40,13 +43,49 @@ import { EventsProvider } from './contexts/EventsContext.jsx';
 import { Web3Provider } from './contexts/blockchain/Web3Context.jsx';
 import { ThemeProvider } from './contexts/ThemeContext.jsx';
 
+// Scroll to top on route change
+
+// Scroll to top on route change
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+};
+
 function App() {
   return (
-    <ThemeProvider>
-      <Web3Provider>
-        <AuthProvider>
-          <EventsProvider>
-            <AnimatePresence mode="wait">
+    <ErrorBoundary>
+      <ThemeProvider>
+        <Web3Provider>
+          <AuthProvider>
+            <EventsProvider>
+              <Toaster 
+                position="top-center"
+                toastOptions={{
+                  duration: 5000,
+                  style: {
+                    padding: 0,
+                    background: 'transparent',
+                    boxShadow: 'none',
+                    maxWidth: '100%',
+                  },
+                  success: {
+                    className: 'bg-green-100 text-green-800',
+                    icon: <div className="bg-green-200 text-green-600 p-1 rounded">✓</div>,
+                  },
+                  error: {
+                    className: 'bg-red-100 text-red-800',
+                    icon: <div className="bg-red-200 text-red-600 p-1 rounded">✕</div>,
+                  },
+                }}
+              />
+              {/* Custom toast notifications will be shown using the showToast function */}
+              <ScrollToTop />
+              <AnimatePresence mode="wait">
               <Routes>
                 {/* Public Routes */}
                 <Route path="/" element={<MainLayout />}>
@@ -84,11 +123,12 @@ function App() {
                 {/* 404 Route */}
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
-            </AnimatePresence>
-          </EventsProvider>
-        </AuthProvider>
-      </Web3Provider>
-    </ThemeProvider>
+              </AnimatePresence>
+            </EventsProvider>
+          </AuthProvider>
+        </Web3Provider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

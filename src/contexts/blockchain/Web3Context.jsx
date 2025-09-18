@@ -84,60 +84,159 @@ const Web3Provider = ({ children }) => {
 
   // Connect wallet function
   const connectWallet = useCallback(async () => {
+    console.log('[Web3Context] connectWallet called');
+    
     if (!window.ethereum) {
-      setError('Please install MetaMask or another Web3 provider');
+      const errorMsg = 'No Ethereum provider found. Please install MetaMask!';
+      console.error(errorMsg);
+      setError(errorMsg);
+      toast.error(errorMsg);
       return false;
     }
 
+    // Check if already connected
+    if (isConnected && account) {
+      console.log('[Web3Context] Wallet already connected:', account);
+      return true;
+    }
+
     try {
+      console.log('[Web3Context] Setting loading to true');
       setLoading(true);
+      setError('');
+      
+      // Create a new provider instance
+      console.log('[Web3Context] Creating new BrowserProvider');
       const web3Provider = new ethers.BrowserProvider(window.ethereum);
       
       // Request account access
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const account = accounts[0];
-      
-      // Initialize contract
-      await initContract(web3Provider);
-      
-      setAccount(account);
-      setProvider(web3Provider);
-      setIsConnected(true);
-      
-      // Get balance
-      const balance = await web3Provider.getBalance(account);
-      setBalance(ethers.formatEther(balance));
-      
-      // Get network chain ID
-      const network = await web3Provider.getNetwork();
-      setChainId(Number(network.chainId));
-      
-      // Set up event listeners for account/chain changes
-      window.ethereum.on('accountsChanged', async (accounts) => {
-        if (accounts.length > 0) {
-          setAccount(accounts[0]);
-          const balance = await web3Provider.getBalance(accounts[0]);
-          setBalance(ethers.formatEther(balance));
+      console.log('[Web3Context] Requesting accounts');
+      let accounts;
+      try {
+        console.log('[Web3Context] Requesting accounts with ethereum provider:', {
+          isMetaMask: window.ethereum.isMetaMask,
+          isConnected: window.ethereum.isConnected(),
+          selectedAddress: window.ethereum.selectedAddress,
+          chainId: window.ethereum.chainId
+        });
+        
+        accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        console.log('[Web3Context] Accounts received:', accounts);
+      } catch (err) {
+        console.error('[Web3Context] Error requesting accounts:', {
+          name: err.name,
+          message: err.message,
+          code: err.code,
+          stack: err.stack,
+          data: err.data
+        });
+        
+        if (err.code === 4001 || err.code === -32002) {
+          // EIP-1193 userRejectedRequest error or already processing
+          throw new Error('Please check your MetaMask extension and approve the connection.');
+        } else if (err.code === -32002) {
+          throw new Error('A connection request is already pending. Please check your MetaMask extension.');
+        } else if (err.code === 'UNSUPPORTED_OPERATION') {
+          throw new Error('Unsupported operation. Please ensure you are on a supported network.');
         } else {
-          // Disconnected
-          setAccount('');
-          setIsConnected(false);
-          setSigner(null);
-          setContract(null);
+          throw new Error(`Connection failed: ${err.message || 'Unknown error'}`);
         }
-      });
+      }
       
-      window.ethereum.on('chainChanged', () => {
-        window.location.reload();
-      });
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts found. Please check your wallet.');
+      }
       
-      toast.success(`Connected to ${account.substring(0, 6)}...${account.substring(38)}`);
-      return true;
+      const account = accounts[0];
+      console.log('[Web3Context] Selected account:', account);
+      
+      try {
+        // Initialize contract
+        console.log('[Web3Context] Initializing contract');
+        await initContract(web3Provider);
+        
+        // Get network info
+        const network = await web3Provider.getNetwork();
+        const chainId = Number(network.chainId);
+        console.log('[Web3Context] Connected to network:', network.name, 'Chain ID:', chainId);
+        
+        // Get account balance
+        console.log('[Web3Context] Getting account balance');
+        const balance = await web3Provider.getBalance(account);
+        const formattedBalance = ethers.formatEther(balance);
+        
+        // Update state
+        setAccount(account);
+        setProvider(web3Provider);
+        setChainId(chainId);
+        setBalance(formattedBalance);
+        setIsConnected(true);
+        
+        console.log('[Web3Context] Wallet connected successfully');
+        toast.success(`Connected to ${account.substring(0, 6)}...${account.substring(38)}`);
+        
+        // Set up event listeners
+        console.log('[Web3Context] Setting up event listeners');
+        
+        // Remove any existing listeners to prevent duplicates
+        if (window.ethereum.removeListener) {
+          window.ethereum.removeAllListeners('accountsChanged');
+          window.ethereum.removeAllListeners('chainChanged');
+        }
+        
+        // Set up new listeners
+        window.ethereum.on('accountsChanged', async (newAccounts) => {
+          console.log('[Web3Context] accountsChanged:', newAccounts);
+          if (newAccounts && newAccounts.length > 0) {
+            const newAccount = newAccounts[0];
+            const newBalance = await web3Provider.getBalance(newAccount);
+            setAccount(newAccount);
+            setBalance(ethers.formatEther(newBalance));
+            toast.info(`Switched to account: ${newAccount.substring(0, 6)}...`);
+          } else {
+            // Disconnected
+            console.log('[Web3Context] Wallet disconnected');
+            setAccount('');
+            setIsConnected(false);
+            setSigner(null);
+            setContract(null);
+            toast.warning('Wallet disconnected');
+          }
+        });
+        
+        window.ethereum.on('chainChanged', (chainId) => {
+          console.log('[Web3Context] chainChanged:', chainId);
+          // Reload the page when network changes
+          window.location.reload();
+        });
+        
+        return true;
+        
+      } catch (err) {
+        console.error('[Web3Context] Error in contract initialization:', err);
+        throw new Error(err.message || 'Failed to initialize contract');
+      }
+      
     } catch (err) {
-      console.error("Error connecting wallet:", err);
-      toast.error("Failed to connect wallet. Please try again.");
+      console.error('[Web3Context] Error in connectWallet:', err);
+      const errorMessage = err.message || 'Failed to connect wallet';
+      setError(errorMessage);
+      
+      // More specific error messages for common issues
+      let userMessage = 'Failed to connect wallet';
+      if (err.code === -32002) {
+        userMessage = 'Please check your MetaMask extension and approve the connection';
+      } else if (err.code === 'ACTION_REJECTED') {
+        userMessage = 'Connection request was rejected';
+      } else if (err.code === 'UNSUPPORTED_OPERATION') {
+        userMessage = 'Unsupported operation. Please check your network connection.';
+      }
+      
+      toast.error(userMessage, { autoClose: 5000 });
       return false;
+      
     } finally {
+      console.log('[Web3Context] Setting loading to false');
       setLoading(false);
     }
   }, [initContract]);
@@ -378,6 +477,258 @@ const Web3Provider = ({ children }) => {
     }
   }, [contract, isConnected]);
 
+  // Create a new event on the blockchain
+  const createEvent = useCallback(async (name, location, date, price, ticketsAvailable, description = '') => {
+    if (!isConnected || !contract) {
+      throw new Error("Wallet not connected");
+    }
+    
+    try {
+      setLoading(true);
+      
+      // Basic input validation
+      if (!name || !location || !date) {
+        throw new Error('Please fill in all required fields');
+      }
+      
+      console.log('Creating event with params:', {
+        name,
+        location,
+        date,
+        price,
+        ticketsAvailable,
+        description
+      });
+      
+      // Ensure price is a valid number and convert to wei
+      let priceInWei;
+      try {
+        // Convert price to a string and clean it
+        const priceStr = price.toString().trim().replace(/,/g, '.');
+        
+        // Validate price is a positive number
+        if (isNaN(priceStr) || parseFloat(priceStr) <= 0) {
+          throw new Error('Price must be a positive number');
+        }
+        
+        // First, validate it's a positive number
+        const priceNum = parseFloat(priceStr);
+        if (isNaN(priceNum) || priceNum <= 0) {
+          throw new Error('Price must be a positive number');
+        }
+        
+        // Then parse to wei
+        priceInWei = ethers.parseEther(priceStr);
+        
+        // Only check for minimum value (0.000001 ETH)
+        if (priceNum < 0.000001) {
+          throw new Error('Price is too low. Minimum is 0.000001 ETH');
+        }
+      } catch (e) {
+        console.error('Price conversion error:', e);
+        throw new Error(e.message.includes('fractional component') 
+          ? 'Invalid price format. Please use numbers with up to 18 decimal places (e.g., 0.1 for 0.1 ETH)'
+          : e.message || 'Invalid price format');
+      }
+      
+      // Ensure date is valid and convert to timestamp
+      let dateTimestamp;
+      try {
+        let timestamp;
+        
+        // Handle different date input types
+        if (date instanceof Date) {
+          timestamp = date.getTime();
+        } else if (typeof date === 'number' || (typeof date === 'string' && /^\d+$/.test(date))) {
+          // If it's a number or numeric string, check if it's in seconds or milliseconds
+          const num = Number(date);
+          timestamp = num <= 1e10 ? num * 1000 : num; // If <= 1e10, assume it's in seconds
+        } else {
+          // Try to parse as a date string
+          timestamp = new Date(date).getTime();
+        }
+        
+        // Validate the timestamp
+        if (isNaN(timestamp)) {
+          throw new Error('Invalid date format');
+        }
+        
+        // Ensure the timestamp is in milliseconds
+        if (timestamp < 1e10) {
+          timestamp *= 1000;
+        }
+        
+        // Convert to seconds for the blockchain
+        dateTimestamp = Math.floor(timestamp / 1000);
+        
+        // Validate the date (should be in the future, at least 5 minutes from now)
+        const currentTime = Math.floor(Date.now() / 1000);
+        const minTime = currentTime + 300; // 5 minutes from now
+        
+        if (dateTimestamp < minTime) {
+          throw new Error('Event date must be at least 5 minutes in the future');
+        }
+        
+        console.log('Date validation:', {
+          input: date,
+          parsed: new Date(dateTimestamp * 1000).toISOString(),
+          unixTimestamp: dateTimestamp
+        });
+      } catch (e) {
+        console.error('Date parsing error:', e);
+        throw new Error(e.message === 'Invalid date format' 
+          ? 'Invalid date format. Please use YYYY-MM-DD format.' 
+          : e.message || 'Please select a valid future date.');
+      }
+      
+      // Ensure ticketsAvailable is a positive integer
+      const tickets = Math.floor(Number(ticketsAvailable));
+      if (isNaN(tickets) || tickets <= 0) {
+        throw new Error('Number of tickets must be a positive number');
+      }
+      
+      try {
+        console.log('Calling contract.createEvent with:', {
+          name,
+          location,
+          date: dateTimestamp,
+          price: priceInWei.toString(),
+          ticketsAvailable: tickets,
+          description: description || ''
+        });
+        
+        // Prepare the transaction parameters
+        const txParams = {
+          gasLimit: 3000000, // Increased gas limit for event creation
+        };
+        
+        console.log('Sending transaction with params:', {
+          name,
+          location,
+          date: dateTimestamp,
+          price: priceInWei.toString(),
+          tickets,
+          description: description || '',
+          txParams
+        });
+        
+        // Call the smart contract with only the required parameters
+        const tx = await contract.createEvent(
+          name,                // string
+          location,            // string
+          dateTimestamp,       // uint256 (seconds since epoch)
+          priceInWei,          // uint256 (in wei)
+          tickets,             // uint256
+          { ...txParams }      // Transaction overrides as the last parameter
+        );
+        
+        console.log('Transaction sent, waiting for confirmation...');
+        
+        // Wait for the transaction to be mined
+        const receipt = await tx.wait();
+        console.log('Transaction mined:', receipt);
+        
+        // Get the event ID from the transaction receipt
+        let eventId = null;
+        if (receipt.logs) {
+          for (const log of receipt.logs) {
+            try {
+              const parsedLog = contract.interface.parseLog(log);
+              if (parsedLog && parsedLog.name === 'EventCreated') {
+                eventId = parsedLog.args.eventId.toString();
+                console.log('Event created with ID:', eventId);
+                break;
+              }
+            } catch (e) {
+              // Ignore logs that can't be parsed
+              console.log('Skipping unparsable log:', e);
+              continue;
+            }
+          }
+        }
+        
+        if (!eventId) {
+          console.warn('EventCreated event not found in receipt logs');
+          // Try to get the latest event ID as a fallback
+          try {
+            const eventCount = await contract.eventCount();
+            eventId = (eventCount - 1n).toString(); // Assuming eventCount is 1-based
+            console.log('Falling back to latest event ID:', eventId);
+          } catch (e) {
+            console.error('Error getting event count:', e);
+          }
+        }
+        
+        if (!eventId) {
+          throw new Error('Event created but could not retrieve event ID');
+        }
+        
+        // Get the created event details
+        const event = await contract.events(eventId);
+        
+        const result = {
+          txHash: receipt.hash,
+          eventId,
+          name: event.name,
+          location: event.location,
+          date: event.date.toString(),
+          price: ethers.formatEther(event.price),
+          ticketsAvailable: event.ticketsAvailable.toString(),
+          organizer: event.organizer,
+          description: event.description || ''
+        };
+        
+        console.log('Event created successfully:', result);
+        return result;
+        
+      } catch (contractError) {
+        console.error('Contract call error:', {
+          error: contractError,
+          message: contractError.message,
+          reason: contractError.reason,
+          code: contractError.code,
+          data: contractError.data
+        });
+        
+        // Rethrow with more context if needed
+        throw contractError;
+      }
+      
+    } catch (error) {
+      console.error("Error creating event:", {
+        error,
+        message: error.message,
+        reason: error.reason,
+        code: error.code,
+        data: error.data
+      });
+      
+      // Provide more user-friendly error messages
+      let errorMessage = 'Failed to create event';
+      
+      if (error.code === 'INVALID_ARGUMENT') {
+        errorMessage = 'Invalid input parameters. Please check your inputs and try again.';
+      } else if (error.code === 'UNPREDICTABLE_GAS_LIMIT') {
+        errorMessage = 'Transaction would fail. Please check your inputs and try again.';
+      } else if (error.code === 'ACTION_REJECTED' || error.code === 4001) {
+        errorMessage = 'Transaction was rejected by user';
+      } else if (error.code === -32603) {
+        errorMessage = 'Transaction failed. You may not have enough ETH for gas.';
+      } else if (error.reason) {
+        // Extract user-friendly error message from the revert reason
+        errorMessage = error.reason
+          .replace('execution reverted: ', '')
+          .replace('VM Exception while processing transaction: revert ', '');
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      throw new Error(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  }, [contract, isConnected]);
+
   // Initialize provider and check if wallet is connected
   useEffect(() => {
     const init = async () => {
@@ -432,6 +783,7 @@ const Web3Provider = ({ children }) => {
         getTicketsForEvent,
         checkTicketValidity,
         useTicket,
+        createEvent,
       }}
     >
       {children}

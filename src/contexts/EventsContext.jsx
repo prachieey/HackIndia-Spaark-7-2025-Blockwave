@@ -1,269 +1,532 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
+import eventAPI from '../services/eventService';
+import { useAuth } from './AuthContext';
+import useApiErrorHandler from '../hooks/useApiErrorHandler';
+import useErrorHandler from '../hooks/useErrorHandler';
 
 const EventsContext = createContext();
 
 export const useEvents = () => useContext(EventsContext);
 
-// Helper function to format price in INR
-export const formatPrice = (price) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0
-  }).format(price);
-};
-
-// Production: No mock event data
-const mockEvents = [];
-
 export const EventsProvider = ({ children }) => {
   const [events, setEvents] = useState([]);
   const [userTickets, setUserTickets] = useState([]);
   const [pendingTickets, setPendingTickets] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth() || {};
+  
+  // Use the error handler hooks
+  const { handleError, handleSuccess } = useErrorHandler();
+  const { 
+    handleApiCall, 
+    isLoading: loading, 
+    error, 
+    clearError 
+  } = useApiErrorHandler();
 
+  // Get a single event by ID
+  const getEventById = useCallback(async (eventId) => {
+    if (!eventId) {
+      console.error('No event ID provided to getEventById');
+      return null;
+    }
+
+    try {
+      // Check if we already have the event in our cache
+      const cachedEvent = events.find(event => event._id === eventId);
+      if (cachedEvent) {
+        console.log('Returning cached event:', cachedEvent._id);
+        return cachedEvent;
+      }
+      
+      console.log('Fetching event from API:', eventId);
+      const eventData = await eventAPI.getEvent(eventId);
+      
+      // If event is not found, return null
+      if (!eventData) {
+        console.warn(`Event not found: ${eventId}`);
+        return null;
+      }
+      
+      console.log('Fetched event:', eventData._id);
+      
+      // Update the events array with the new event
+      setEvents(prevEvents => {
+        const exists = prevEvents.some(e => e._id === eventData._id);
+        const updatedEvents = exists 
+          ? prevEvents.map(e => e._id === eventData._id ? eventData : e)
+          : [...prevEvents, eventData];
+        
+        console.log('Updated events list with new event');
+        return updatedEvents;
+      });
+      
+      return eventData;
+    } catch (error) {
+      console.error('Error in getEventById:', {
+        eventId,
+        error: error.message,
+        stack: error.stack
+      });
+      console.error('Error fetching event:', error);
+      handleError(error, 'Failed to fetch event details');
+      throw error;
+    }
+  }, [events, handleError]);
+
+  // Fetch all events with optional filters
+  const fetchEvents = useCallback(async (filters = {}) => {
+    try {
+      const response = await eventAPI.getEvents(filters);
+      
+      // Handle the nested response format: { success: true, results: number, data: { events: [...] } }
+      if (response && response.data && Array.isArray(response.data.events)) {
+        setEvents(response.data.events);
+        return response.data.events;
+      } 
+      // Fallback to direct array if the nested format changes
+      else if (Array.isArray(response)) {
+        setEvents(response);
+        return response;
+      }
+      
+      throw new Error('Invalid response format from server');
+    } catch (error) {
+      console.error('Error fetching events:', error);
+      setEvents([]);
+      handleError(error, 'Failed to fetch events');
+      throw error;
+    }
+  }, [handleError]);
+
+
+  // Create a new event
+  const createEvent = useCallback(async (eventData) => {
+    try {
+      const eventWithOrganizer = user 
+        ? { ...eventData, organizer: user.id }
+        : eventData;
+      
+      const response = await eventAPI.createEvent(eventWithOrganizer);
+      
+      // Handle the nested response format: { success: true, data: { event: {...} } }
+      const newEvent = response.data?.event || response;
+      
+      if (!newEvent) {
+        throw new Error('Failed to create event: Invalid response from server');
+      }
+      
+      // Add the new event to the events array
+      setEvents(prevEvents => [...prevEvents, newEvent]);
+      
+      handleSuccess('Event created successfully');
+      return newEvent;
+    } catch (error) {
+      console.error('Error creating event:', error);
+      handleError(error, 'Failed to create event');
+      throw error;
+    }
+  }, [user, handleError, handleSuccess]);
+
+  // Update an event
+  const updateEvent = useCallback(async (eventId, eventData) => {
+    try {
+      const response = await eventAPI.updateEvent(eventId, eventData);
+      
+      // Handle the nested response format: { success: true, data: { event: {...} } }
+      const updatedEvent = response.data?.event || response;
+      
+      if (!updatedEvent) {
+        throw new Error('Failed to update event: Invalid response from server');
+      }
+      
+      // Update the events list
+      setEvents(prev => 
+        prev.map(event => event._id === eventId ? { ...event, ...updatedEvent } : event)
+      );
+      
+      handleSuccess('Event updated successfully');
+      return updatedEvent;
+    } catch (error) {
+      console.error(`Error updating event ${eventId}:`, error);
+      handleError(error, 'Failed to update event');
+      throw error;
+    }
+  }, [handleError, handleSuccess]);
+
+  // Delete an event
+  const deleteEvent = useCallback(async (eventId) => {
+    try {
+      const response = await eventAPI.deleteEvent(eventId);
+      
+      // Handle the nested response format: { success: true, data: { event: {...} } }
+      const deletedEvent = response.data?.event || response;
+      
+      if (!deletedEvent) {
+        throw new Error('Failed to delete event: Invalid response from server');
+      }
+      
+      // Remove the event from the events list
+      setEvents(prev => prev.filter(event => event._id !== eventId));
+      
+      handleSuccess('Event deleted successfully');
+      return deletedEvent;
+    } catch (error) {
+      console.error(`Error deleting event ${eventId}:`, error);
+      handleError(error, 'Failed to delete event');
+      throw error;
+    }
+  }, [handleError, handleSuccess]);
+
+  // Fetch user's tickets
+  const fetchUserTickets = useCallback(async () => {
+    if (!user) {
+      setUserTickets([]);
+      return [];
+    }
+    
+    try {
+      const tickets = await eventAPI.getMyTickets();
+      
+      // Ensure we're working with an array
+      const ticketsArray = Array.isArray(tickets) ? tickets : [];
+      
+      // Update state with the tickets
+      setUserTickets(ticketsArray);
+      return ticketsArray;
+    } catch (error) {
+      console.error('Error in fetchUserTickets:', error);
+      setUserTickets([]);
+      handleError(error, 'Failed to load your tickets');
+      return [];
+    }
+  }, [handleError, user]);
+
+  // Fetch pending tickets (for organizers)
+  const fetchPendingTickets = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const tickets = await eventAPI.getPendingTickets();
+      setPendingTickets(tickets);
+      return tickets;
+    } catch (error) {
+      handleError(error, 'Failed to load pending tickets');
+      throw error;
+    }
+  }, [handleError, user]);
+
+  // Submit ticket for approval
+  const submitTicketForApproval = useCallback(async (ticketData) => {
+    if (!user) {
+      const error = new Error('You must be logged in to submit a ticket');
+      handleError(error);
+      throw error;
+    }
+    
+    try {
+      const ticket = await eventAPI.createTicket(ticketData.eventId, {
+        ...ticketData,
+        status: 'pending',
+        owner: user.id,
+      });
+      
+      // Update the user's tickets
+      setUserTickets(prev => [ticket, ...prev]);
+      
+      // If this is the current user's own event, add to pending tickets
+      if (ticket.event.organizer === user.id) {
+        setPendingTickets(prev => [ticket, ...prev]);
+      }
+      
+      handleSuccess('Ticket submitted for approval');
+      return ticket;
+    } catch (error) {
+      handleError(error, 'Failed to submit ticket for approval');
+      throw error;
+    }
+  }, [handleError, handleSuccess, user]);
+
+  // Approve ticket (for organizers)
+  const approveTicket = useCallback(async (ticketId) => {
+    try {
+      const ticket = await eventAPI.approveTicket(ticketId);
+      
+      // Update the ticket in the pending tickets list
+      setPendingTickets(prev => 
+        prev.filter(t => t._id !== ticketId)
+      );
+      
+      // Update the ticket in the user's tickets list if it exists there
+      setUserTickets(prev => 
+        prev.map(t => t._id === ticketId ? { ...t, status: 'approved' } : t)
+      );
+      
+      handleSuccess('Ticket approved successfully');
+      return ticket;
+    } catch (error) {
+      handleError(error, 'Failed to approve ticket');
+      throw error;
+    }
+  }, [handleError, handleSuccess]);
+
+  // Reject ticket (for organizers)
+  const rejectTicket = useCallback(async (ticketId, reason) => {
+    try {
+      const ticket = await eventAPI.rejectTicket(ticketId, { reason });
+      
+      // Update the ticket in the pending tickets list
+      setPendingTickets(prev => 
+        prev.filter(t => t._id !== ticketId)
+      );
+      
+      // Update the ticket in the user's tickets list if it exists there
+      setUserTickets(prev => 
+        prev.map(t => t._id === ticketId ? { ...t, status: 'rejected', rejectionReason: reason } : t)
+      );
+      
+      handleSuccess('Ticket rejected successfully');
+      return ticket;
+    } catch (error) {
+      handleError(error, 'Failed to reject ticket');
+      throw error;
+    }
+  }, [handleError, handleSuccess]);
+
+  // Validate ticket (for organizers)
+  const validateTicket = useCallback(async (ticketId) => {
+    try {
+      const validation = await eventAPI.validateTicket(ticketId);
+      
+      // Update the ticket in the user's tickets list if it exists there
+      setUserTickets(prev => 
+        prev.map(t => t._id === ticketId ? { ...t, status: 'used', usedAt: new Date() } : t)
+      );
+      
+      handleSuccess('Ticket validated successfully');
+      return validation;
+    } catch (error) {
+      handleError(error, 'Failed to validate ticket');
+      throw error;
+    }
+  }, [handleError, handleSuccess]);
+
+  // List ticket for resale
+  const listTicketForResale = useCallback(async (ticketId, price) => {
+    try {
+      const ticket = await eventAPI.listTicketForResale(ticketId, { price });
+      
+      // Update the ticket in the user's tickets list
+      setUserTickets(prev => 
+        prev.map(t => t._id === ticketId ? { ...t, status: 'resale', resalePrice: price } : t)
+      );
+      
+      handleSuccess('Ticket listed for resale successfully');
+      return ticket;
+    } catch (error) {
+      handleError(error, 'Failed to list ticket for resale');
+      throw error;
+    }
+  }, [handleError, handleSuccess]);
+
+  // Purchase resale ticket
+  const purchaseResaleTicket = useCallback(async (ticketId) => {
+    try {
+      const result = await eventAPI.purchaseResaleTicket(ticketId);
+      
+      if (result.success) {
+        // Remove the ticket from the current user's tickets (if it was in resale)
+        setUserTickets(prev => 
+          prev.filter(t => t._id !== ticketId)
+        );
+        
+        // Add the ticket to the current user's tickets
+        setUserTickets(prev => [result.ticket, ...prev]);
+        
+        handleSuccess('Ticket purchased successfully');
+        return result;
+      } else {
+        throw new Error(result.error || 'Failed to purchase ticket');
+      }
+    } catch (error) {
+      handleError(error, 'Failed to purchase ticket');
+      return { success: false, error: error.message };
+    }
+  }, [handleError, handleSuccess]);
+
+  // Cancel ticket
+  const cancelTicket = useCallback(async (ticketId) => {
+    try {
+      await eventAPI.cancelTicket(ticketId);
+      
+      // Remove the ticket from the user's tickets list
+      setUserTickets(prev => 
+        prev.filter(t => t._id !== ticketId)
+      );
+      
+      // Also remove from pending tickets if it's there
+      setPendingTickets(prev => 
+        prev.filter(t => t._id !== ticketId)
+      );
+      
+      handleSuccess('Ticket cancelled successfully');
+      return true;
+    } catch (error) {
+      handleError(error, 'Failed to cancel ticket');
+      throw error;
+    }
+  }, [handleError, handleSuccess]);
+
+  // Mark ticket as used
+  const markTicketAsUsed = useCallback(async (ticketId) => {
+    try {
+      const ticket = await eventAPI.validateTicket(ticketId, { markAsUsed: true });
+      
+      // Update the ticket in the user's tickets list if it exists there
+      setUserTickets(prev => 
+        prev.map(t => t._id === ticketId ? { ...t, status: 'used', usedAt: new Date() } : t)
+      );
+      
+      handleSuccess('Ticket marked as used');
+      return ticket;
+    } catch (error) {
+      handleError(error, 'Failed to mark ticket as used');
+      throw error;
+    }
+  }, [handleError, handleSuccess]);
+
+  // Load initial data when the user is authenticated
   useEffect(() => {
-    const fetchEvents = async () => {
-      try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setEvents([]);
-        
-        const storedTickets = localStorage.getItem('scantyx_user_tickets');
-        if (storedTickets) {
-          setUserTickets(JSON.parse(storedTickets));
-        }
+    let isMounted = true;
 
-        const storedPendingTickets = localStorage.getItem('scantyx_pending_tickets');
-        if (storedPendingTickets) {
-          setPendingTickets(JSON.parse(storedPendingTickets));
-        }
+    const loadData = async () => {
+      try {
+        await fetchEvents();
         
-        setLoading(false);
+        if (user) {
+          await fetchUserTickets();
+          
+          // If user is an organizer, fetch pending tickets
+          if (user.role === 'organizer') {
+            await fetchPendingTickets();
+          }
+        }
       } catch (error) {
-        console.error('Error fetching events:', error);
-        setLoading(false);
+        // Errors are already handled by the individual fetch functions
+        console.error('Failed to load initial data:', error);
       }
     };
 
-    fetchEvents();
-  }, []);
+    if (isMounted) {
+      loadData();
+    }
 
-  const getEventById = (eventId) => {
-    return events.find(event => event.id === eventId);
-  };
-
-  const createEvent = (eventData) => {
-    const newEvent = {
-      id: 'evt_' + Math.random().toString(36).substr(2, 9),
-      ...eventData,
-      availableTickets: parseInt(eventData.availableTickets, 10),
-      price: parseInt(eventData.price, 10),
-      date: new Date(eventData.date).toISOString(),
-      status: 'pending'
+    return () => {
+      isMounted = false;
     };
-    
-    setEvents(prevEvents => [newEvent, ...prevEvents]);
-    return newEvent;
-  };
-
-  const updateEvent = (eventId, updatedData) => {
-    setEvents(prevEvents =>
-      prevEvents.map(event =>
-        event.id === eventId
-          ? { ...event, ...updatedData }
-          : event
-      )
-    );
-  };
-
-  const deleteEvent = (eventId) => {
-    setEvents(prevEvents => prevEvents.filter(event => event.id !== eventId));
-  };
-
-  const submitTicketForApproval = (eventId, userId, quantity) => {
-    const event = getEventById(eventId);
-    if (!event || event.availableTickets < quantity) {
-      return { success: false, message: 'Tickets not available' };
-    }
-
-    const pendingTicket = {
-      id: 'tkt_' + Math.random().toString(36).substr(2, 9),
-      eventId,
-      eventTitle: event.title,
-      userId,
-      quantity,
-      price: event.price,
-      submissionDate: new Date().toISOString(),
-      status: 'pending'
+  }, [fetchEvents, fetchUserTickets, fetchPendingTickets, user]);
+  
+  // Clear error when component unmounts
+  useEffect(() => {
+    return () => {
+      clearError();
     };
+  }, [clearError]);
 
-    setPendingTickets(prev => [...prev, pendingTicket]);
-    localStorage.setItem('scantyx_pending_tickets', JSON.stringify([...pendingTickets, pendingTicket]));
+  // Handle error dismissal
+  const dismissError = useCallback(() => {
+    clearError();
+  }, [clearError]);
 
-    return { success: true, ticket: pendingTicket };
-  };
-
-  const approveTicket = (ticketId) => {
-    const pendingTicket = pendingTickets.find(t => t.id === ticketId);
-    if (!pendingTicket) return { success: false, message: 'Ticket not found' };
-
-    const event = getEventById(pendingTicket.eventId);
-    if (!event || event.availableTickets < pendingTicket.quantity) {
-      return { success: false, message: 'Not enough tickets available' };
+  // Purchase a ticket for an event
+  const purchaseTicket = useCallback(async (eventId, quantity = 1) => {
+    try {
+      const response = await eventAPI.purchaseTicket(eventId, { quantity });
+      
+      // Update the user's tickets list
+      if (response && response.data) {
+        const newTicket = response.data.ticket || response.data;
+        setUserTickets(prevTickets => [...prevTickets, newTicket]);
+        
+        // Also update the event's available tickets count
+        setEvents(prevEvents => 
+          prevEvents.map(event => 
+            event._id === eventId 
+              ? { ...event, availableTickets: event.availableTickets - quantity }
+              : event
+          )
+        );
+        
+        handleSuccess('Ticket purchased successfully!');
+        return newTicket;
+      }
+      
+      throw new Error('Failed to purchase ticket');
+    } catch (error) {
+      console.error('Error purchasing ticket:', error);
+      handleError(error, 'Failed to purchase ticket');
+      throw error;
     }
+  }, [handleError, handleSuccess]);
 
-    const approvedTicket = {
-      ...pendingTicket,
-      approvalDate: new Date().toISOString(),
-      qrData: `SCANTYX-${pendingTicket.eventId}-${Math.random().toString(36).substr(2, 16)}`,
-      isUsed: false,
-      isForSale: false,
-      status: 'approved'
-    };
-
-    updateEvent(pendingTicket.eventId, {
-      availableTickets: event.availableTickets - pendingTicket.quantity
-    });
-
-    setPendingTickets(prev => prev.filter(t => t.id !== ticketId));
-    setUserTickets(prev => [...prev, approvedTicket]);
-
-    localStorage.setItem('scantyx_pending_tickets', JSON.stringify(pendingTickets.filter(t => t.id !== ticketId)));
-    localStorage.setItem('scantyx_user_tickets', JSON.stringify([...userTickets, approvedTicket]));
-
-    return { success: true, ticket: approvedTicket };
+  // Format price with 2 decimal places and currency symbol
+  const formatPrice = (price) => {
+    if (price === 0 || price === '0') return 'Free';
+    return `$${Number(price).toFixed(2)}`;
   };
 
-  const rejectTicket = (ticketId) => {
-    setPendingTickets(prev => prev.filter(t => t.id !== ticketId));
-    localStorage.setItem('scantyx_pending_tickets', JSON.stringify(pendingTickets.filter(t => t.id !== ticketId)));
-    return { success: true };
-  };
-
-  const purchaseTicket = (eventId, quantity = 1) => {
-    const event = getEventById(eventId);
-    if (!event || event.availableTickets < quantity) {
-      return { success: false, message: 'Tickets not available' };
-    }
-
-    const newTicket = {
-      id: 'tkt_' + Math.random().toString(36).substr(2, 9),
-      eventId,
-      eventTitle: event.title,
-      purchaseDate: new Date().toISOString(),
-      price: event.price,
-      qrData: `SCANTYX-${eventId}-${Math.random().toString(36).substr(2, 16)}`,
-      isUsed: false,
-      isForSale: false,
-      resalePrice: null
-    };
-
-    setEvents(prevEvents => 
-      prevEvents.map(e => 
-        e.id === eventId 
-          ? { ...e, availableTickets: e.availableTickets - quantity } 
-          : e
-      )
-    );
-
-    const updatedTickets = [...userTickets, newTicket];
-    setUserTickets(updatedTickets);
-    
-    localStorage.setItem('scantyx_user_tickets', JSON.stringify(updatedTickets));
-
-    return { success: true, ticket: newTicket };
-  };
-
-  const validateTicket = (qrData) => {
-    const ticket = userTickets.find(t => t.qrData === qrData);
-    
-    if (!ticket) {
-      return { success: false, message: 'Invalid ticket' };
-    }
-    
-    if (ticket.isUsed) {
-      return { success: false, message: 'Ticket already used' };
-    }
-    
-    const updatedTickets = userTickets.map(t => 
-      t.id === ticket.id ? { ...t, isUsed: true } : t
-    );
-    
-    setUserTickets(updatedTickets);
-    localStorage.setItem('scantyx_user_tickets', JSON.stringify(updatedTickets));
-    
-    return { 
-      success: true, 
-      message: 'Ticket validated successfully',
-      ticket
-    };
-  };
-
-  const listTicketForResale = (ticketId, resalePrice) => {
-    const ticket = userTickets.find(t => t.id === ticketId);
-    
-    if (!ticket || ticket.isUsed) {
-      return { success: false, message: 'Cannot resell this ticket' };
-    }
-    
-    const updatedTickets = userTickets.map(t => 
-      t.id === ticketId 
-        ? { ...t, isForSale: true, resalePrice: parseInt(resalePrice, 10) } 
-        : t
-    );
-    
-    setUserTickets(updatedTickets);
-    localStorage.setItem('scantyx_user_tickets', JSON.stringify(updatedTickets));
-    
-    return { success: true, message: 'Ticket listed for resale' };
-  };
-
-  const purchaseResaleTicket = (ticketId) => {
-    const ticket = userTickets.find(t => t.id === ticketId && t.isForSale);
-    
-    if (!ticket) {
-      return { success: false, message: 'Ticket not available for purchase' };
-    }
-    
-    const updatedTickets = userTickets.map(t => 
-      t.id === ticketId 
-        ? { 
-            ...t, 
-            isForSale: false, 
-            resalePrice: null,
-            qrData: `SCANTYX-${t.eventId}-${Math.random().toString(36).substr(2, 16)}`,
-          } 
-        : t
-    );
-    
-    setUserTickets(updatedTickets);
-    localStorage.setItem('scantyx_user_tickets', JSON.stringify(updatedTickets));
-    
-    return { 
-      success: true, 
-      message: 'Resale ticket purchased successfully',
-      ticket: updatedTickets.find(t => t.id === ticketId)
-    };
-  };
-
-  const value = {
+  // Memoize the context value to prevent unnecessary re-renders
+  const contextValue = React.useMemo(() => ({
     events,
+    userTickets,
+    pendingTickets,
     loading,
+    error,
+    dismissError,
+    fetchEvents,
     getEventById,
     createEvent,
     updateEvent,
     deleteEvent,
-    purchaseTicket,
-    validateTicket,
-    userTickets,
-    listTicketForResale,
-    purchaseResaleTicket,
-    formatPrice,
+    fetchUserTickets,
+    fetchPendingTickets,
     submitTicketForApproval,
     approveTicket,
     rejectTicket,
-    pendingTickets
-  };
+    validateTicket,
+    listTicketForResale,
+    purchaseResaleTicket,
+    purchaseTicket,
+    cancelTicket,
+    markTicketAsUsed,
+    formatPrice, // Add the formatPrice function to the context value
+  }), [
+    events,
+    userTickets,
+    pendingTickets,
+    loading,
+    error,
+    dismissError,
+    fetchEvents,
+    getEventById,
+    createEvent,
+    updateEvent,
+    deleteEvent,
+    fetchUserTickets,
+    fetchPendingTickets,
+    submitTicketForApproval,
+    approveTicket,
+    rejectTicket,
+    validateTicket,
+    listTicketForResale,
+    purchaseResaleTicket,
+    cancelTicket,
+    markTicketAsUsed,
+    formatPrice,
+  ]);
 
-  return <EventsContext.Provider value={value}>{children}</EventsContext.Provider>;
+  return (
+    <EventsContext.Provider value={contextValue}>
+      {children}
+    </EventsContext.Provider>
+  );
 };

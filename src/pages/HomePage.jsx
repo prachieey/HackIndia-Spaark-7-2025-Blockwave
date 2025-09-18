@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import EventCard from '../components/events/EventCard';
 import QRTicket from '../components/tickets/QRTicket';
 import TestimonialsSection from '../components/testimonials/TestimonialsSection';
+import FeaturesSection from '../components/features/FeaturesSection';
 
 const HomePage = () => {
   const { openAuthModal } = useOutletContext();
@@ -60,6 +61,20 @@ const HomePage = () => {
     }
   };
 
+  // Handle create event button click
+  const handleCreateEvent = (e) => {
+    if (!isAuthenticated) {
+      e.preventDefault();
+      openAuthModal('signup');
+    }
+  };
+
+  // Handle explore events button click
+  const handleExploreEvents = (e) => {
+    e.preventDefault();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <>
       {/* Hero Section */}
@@ -90,14 +105,28 @@ const HomePage = () => {
               
               <div className="flex flex-col sm:flex-row gap-4">
                 {isAuthenticated ? (
-                  <Link to="/user/create-event" className="btn btn-primary">
+                  <Link 
+                    to="/user/create-event" 
+                    className="btn btn-primary"
+                    onClick={handleCreateEvent}
+                  >
                     Host an Event
                   </Link>
                 ) : (
-                  <button onClick={() => openAuthModal('signup')} className="btn btn-primary">
+                  <button 
+                    onClick={(e) => openAuthModal('signup')} 
+                    className="btn btn-primary"
+                  >
                     Get Started
                   </button>
                 )}
+                <Link 
+                  to="/explore" 
+                  className="btn btn-outline"
+                  onClick={handleExploreEvents}
+                >
+                  Explore Events
+                </Link>
                 
                 <Link to="/explore" className="btn btn-secondary">
                   Explore Events
@@ -128,6 +157,37 @@ const HomePage = () => {
                     <QrCode className="h-48 w-48 text-deep-purple" />
                   </div>
                   
+                  <div className="mt-12 space-y-4">
+                    <div className="flex items-center space-x-4 group cursor-pointer hover:bg-gray-800/50 p-3 rounded-lg transition-colors">
+                      <div className="p-3 rounded-full bg-deep-purple/10 text-deep-purple group-hover:bg-deep-purple/20 transition-colors">
+                        <Shield className="w-6 h-6" />
+                      </div>
+                      <p className="text-holographic-white/80 group-hover:text-white transition-colors">
+                        Secure & Verifiable Tickets
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-4 group cursor-pointer hover:bg-gray-800/50 p-3 rounded-lg transition-colors">
+                      <div className="p-3 rounded-full bg-tech-blue/10 text-tech-blue group-hover:bg-tech-blue/20 transition-colors">
+                        <QrCode className="w-6 h-6" />
+                      </div>
+                      <p className="text-holographic-white/80 group-hover:text-white transition-colors">
+                        Dynamic QR Technology
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-4 group cursor-pointer hover:bg-gray-800/50 p-3 rounded-lg transition-colors"
+                         onClick={() => window.scrollTo({ top: document.getElementById('how-it-works').offsetTop - 100, behavior: 'smooth' })}>
+                      <div className="p-3 rounded-full bg-green-500/10 text-green-500 group-hover:bg-green-500/20 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                          <circle cx="12" cy="12" r="10"></circle>
+                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                      </div>
+                      <p className="text-holographic-white/80 group-hover:text-white transition-colors">
+                        How It Works
+                      </p>
+                    </div>
+                  </div>
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-holographic-white/70">Date:</span>
@@ -215,6 +275,9 @@ const HomePage = () => {
         </div>
       </section>
 
+      {/* Features Section */}
+      <FeaturesSection />
+      
       {/* Featured Events Section */}
       <section className="py-20 bg-space-black">
         <div className="container mx-auto px-4">
@@ -230,11 +293,11 @@ const HomePage = () => {
               <EventCard key={event.id} event={event} />
             ))}
           </div>
-          
-          {/* Testimonials Section */}
-          <TestimonialsSection />
         </div>
       </section>
+      
+      {/* Testimonials Section */}
+      <TestimonialsSection />
 
       {/* Resell Tickets Section (only show if user has tickets) */}
       {resellableTickets.length > 0 && (

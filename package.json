@@ -12,9 +12,14 @@
     "server": "nodemon server.js",
     "client": "npm run dev",
     "dev:fullstack": "concurrently \"npm run server\" \"npm run client\"",
-    "test": "jest --watchAll --verbose"
+    "test": "jest --watchAll --verbose",
+    "seed:reviews": "node scripts/seedReviews.js",
+    "seed:all": "npm run seed:reviews"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-slot": "^1.2.3",
     "@react-spring/web": "^9.7.3",
     "axios": "^1.6.7",
     "bcryptjs": "^2.4.3",
@@ -73,6 +78,9 @@
     "@nomicfoundation/hardhat-toolbox": "^2.0.2",
     "@nomiclabs/hardhat-ethers": "^2.2.3",
     "@nomiclabs/hardhat-etherscan": "^3.1.8",
+    "@tailwindcss/aspect-ratio": "^0.4.2",
+    "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/typography": "^0.5.16",
     "@typechain/ethers-v5": "^11.1.2",
     "@typechain/hardhat": "^9.1.0",
     "@types/chai": "^4.3.0",

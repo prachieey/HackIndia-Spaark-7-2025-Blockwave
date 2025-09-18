@@ -19,13 +19,76 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 const MONGODB_URI = process.env.MONGODB_URI_DEV || 'mongodb://127.0.0.1:27017/scantyx-dev';
 
-// Set security HTTP headers
-app.use(helmet());
+// Set security HTTP headers with CSP configuration
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'unsafe-eval'"
+        ],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'"
+        ],
+        imgSrc: [
+          "'self'",
+          'data:',
+          'https:'
+        ],
+        connectSrc: [
+          "'self'",
+          'http://localhost:*',
+          'ws://localhost:*',
+          'wss://*',
+          'https://*'
+        ],
+        fontSrc: [
+          "'self'",
+          'data:',
+          'https:'
+        ],
+        frameSrc: [
+          "'self'",
+          'https:'
+        ],
+        workerSrc: [
+          "'self'",
+          'blob:',
+          'data:'
+        ]
+      }
+    }
+  })
+);
 
 // Enable CORS
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = `The CORS policy for this site does not allow access from the specified origin: ${origin}`;
+      console.warn(msg);
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Development logging
@@ -69,14 +132,36 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Routes
+// Debug middleware to log all incoming requests
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+});
+
+// Routes with logging
+console.log('Mounting routes...');
+console.log('  - /api/v1/users');
+console.log('  - /api/v1/events');
+console.log('  - /api/v1/tickets');
+console.log('  - /api/v1/auth');
+
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/events', eventRoutes);
 app.use('/api/v1/tickets', ticketRoutes);
 app.use('/api/v1/auth', authRoutes);
 
-// Handle 404 - Not Found
-app.all('*', (req, res) => {
+console.log('Routes mounted successfully');
+
+// Serve static files from the dist directory
+app.use(express.static('dist'));
+
+// Handle client-side routing - return all requests to the app
+app.get('*', (req, res) => {
+  res.sendFile('index.html', { root: 'dist' });
+});
+
+// Handle API 404 - Not Found
+app.all('/api/*', (req, res) => {
   res.status(404).json({
     status: 'fail',
     message: `Can't find ${req.originalUrl} on this server!`

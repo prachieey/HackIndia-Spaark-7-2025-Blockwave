@@ -1,48 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lato:wght@300;400;700&family=Poppins:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-space-black text-holographic-white;
-  font-family: 'Inter', 'Poppins', 'Lato', sans-serif;
+@layer base {
+  body {
+    @apply bg-space-black text-holographic-white;
+    font-family: 'Inter', 'Poppins', 'Lato', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-bold text-holographic-white;
+  }
+
+  h1 { @apply text-4xl md:text-5xl; }
+  h2 { @apply text-3xl md:text-4xl; }
+  h3 { @apply text-2xl md:text-3xl; }
+  h4 { @apply text-xl md:text-2xl; }
+  h5 { @apply text-lg md:text-xl; }
+  h6 { @apply text-base md:text-lg; }
+
+  p {
+    @apply text-holographic-white/80 leading-relaxed;
+  }
 }
 
-.btn {
-  @apply px-6 py-3 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 focus:outline-none;
+@layer components {
+  .btn {
+    @apply px-6 py-3 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 
+           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-space-black 
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white focus:ring-primary-500;
+  }
+
+  .btn-secondary {
+    @apply bg-tech-blue hover:bg-tech-blue/90 text-white focus:ring-tech-blue/50;
+  }
+
+  .btn-success {
+    @apply bg-validation-green hover:bg-validation-green/90 text-white focus:ring-validation-green/50;
+  }
+
+  .btn-outline {
+    @apply bg-transparent border-2 border-holographic-white/20 hover:bg-holographic-white/5 
+           text-holographic-white focus:ring-holographic-white/30;
+  }
+
+  .card {
+    @apply bg-space-black/50 backdrop-blur-sm border border-neutral-800 rounded-xl overflow-hidden 
+           shadow-lg hover:shadow-xl transition-all duration-300 hover:border-primary-500/30;
+  }
+
+  .input {
+    @apply bg-space-black/50 border border-neutral-700 rounded-lg px-4 py-2 text-holographic-white 
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent 
+           placeholder-neutral-500 transition-all duration-200;
+  }
+
+  .section-title {
+    @apply text-3xl font-bold mb-6 text-holographic-white relative inline-block;
+  }
+
+  .section-title:after {
+    @apply content-[''] block w-1/3 h-1 bg-gradient-to-r from-primary-500 to-tech-blue mt-2 rounded-full;
+  }
+
+  .tagline {
+    @apply text-lg font-medium text-tech-blue/90 italic;
+  }
+
+  .glow-effect {
+    @apply relative overflow-hidden;
+  }
+
+  .glow-effect:before {
+    @apply content-[''] absolute -inset-1 bg-gradient-to-r from-primary-500 to-tech-blue/50 
+           rounded-lg blur opacity-20 group-hover:opacity-40 transition duration-300;
+  }
 }
 
-.btn-primary {
-  @apply bg-deep-purple text-holographic-white hover:bg-opacity-90 hover:shadow-lg;
-}
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-400 to-tech-blue;
+  }
 
-.btn-secondary {
-  @apply bg-tech-blue text-holographic-white hover:bg-opacity-90;
-}
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
 
-.btn-success {
-  @apply bg-validation-green text-holographic-white hover:bg-opacity-90;
-}
+  .animate-float-delay {
+    animation: float 6s ease-in-out 0.5s infinite;
+  }
 
-.btn-danger {
-  @apply bg-flame-red text-holographic-white hover:bg-opacity-90;
-}
-
-.card {
-  @apply bg-space-black border border-deep-purple rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300;
-}
-
-.input {
-  @apply bg-space-black border border-tech-blue rounded-lg px-4 py-2 text-holographic-white focus:outline-none focus:ring-2 focus:ring-deep-purple;
-}
-
-.glow-effect {
-  @apply hover:animate-glow;
-}
-
-.section-title {
-  @apply text-3xl font-bold mb-6 text-holographic-white;
-}
-
-.tagline {
-  @apply text-xl font-semibold text-tech-blue italic;
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+    100% { transform: translateY(0px); }
+  }
 }

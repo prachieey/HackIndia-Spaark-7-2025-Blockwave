@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { FaUserCircle } from 'react-icons/fa';
+import { FaUserCircle, FaEdit, FaTrash } from 'react-icons/fa';
 import StarRating from './StarRating';
-import { getEventReviews } from '../../services/reviewService';
+import { getEventReviews, deleteReview } from '../../services/reviewService';
 import { format } from 'date-fns';
+import { useAuth } from '../../contexts/AuthContext';
+import { toast } from 'react-toastify';
 
-const ReviewList = ({ eventId, currentUser }) => {
+const ReviewList = ({ eventId, currentUser, onReviewUpdate, onReviewDelete }) => {
   const [reviews, setReviews] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -13,16 +15,38 @@ const ReviewList = ({ eventId, currentUser }) => {
   const limit = 5;
 
   const fetchReviews = async (pageNum) => {
+    if (!eventId) return;
+    
     try {
       setIsLoading(true);
-      const data = await getEventReviews(eventId, { page: pageNum, limit });
+      const response = await getEventReviews(eventId, { page: pageNum, limit });
       
-      setReviews(prev => pageNum === 1 ? data.docs : [...prev, ...data.docs]);
-      setHasMore(data.hasNextPage);
+      // The response is already the data we need (array of reviews)
+      if (Array.isArray(response)) {
+        setReviews(prev => pageNum === 1 ? response : [...prev, ...response]);
+        // If we get fewer items than the limit, we've reached the end
+        setHasMore(response.length === limit);
+      } else {
+        // Handle unexpected response format
+        console.warn('Unexpected response format from getEventReviews:', response);
+        setReviews([]);
+        setHasMore(false);
+      }
+      
       setError(null);
     } catch (err) {
       console.error('Error fetching reviews:', err);
-      setError('Failed to load reviews. Please try again later.');
+      setError('Failed to load reviews. Please try again.');
+      setReviews([]);
+      
+      toast.error('Failed to load reviews. Please refresh the page.', {
+        position: 'top-center',
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
     } finally {
       setIsLoading(false);
     }
@@ -31,6 +55,47 @@ const ReviewList = ({ eventId, currentUser }) => {
   useEffect(() => {
     fetchReviews(page);
   }, [page]);
+
+  const handleEdit = (review) => {
+    if (onReviewUpdate) {
+      onReviewUpdate(review);
+    }
+  };
+
+  const handleDelete = async (reviewId) => {
+    if (window.confirm('Are you sure you want to delete this review?')) {
+      try {
+        await deleteReview(reviewId);
+        
+        // Update the UI by removing the deleted review
+        setReviews(prev => prev.filter(r => r._id !== reviewId));
+        
+        // Notify parent component about the deletion
+        if (onReviewDelete) {
+          onReviewDelete(reviewId);
+        }
+        
+        toast.success('Review deleted successfully!', {
+          position: 'top-center',
+          autoClose: 3000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      } catch (error) {
+        console.error('Error deleting review:', error);
+        toast.error('Failed to delete review. Please try again.', {
+          position: 'top-center',
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true,
+        });
+      }
+    }
+  };
 
   const loadMore = () => {
     if (!isLoading && hasMore) {
@@ -100,92 +165,74 @@ const ReviewList = ({ eventId, currentUser }) => {
 };
 
 const ReviewItem = ({ review, currentUser, onUpdate, onDelete }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const isCurrentUserReview = currentUser && review.user._id === currentUser._id;
-
-  const handleUpdateSuccess = (updatedReview) => {
-    setIsEditing(false);
-    if (onUpdate) onUpdate(updatedReview);
-  };
-
-  const handleDelete = async () => {
-    if (window.confirm('Are you sure you want to delete this review?')) {
-      try {
-        setIsDeleting(true);
-        // Call API to delete review
-        // await deleteReview(review._id);
-        if (onDelete) onDelete(review._id);
-        toast.success('Review deleted successfully');
-      } catch (error) {
-        console.error('Error deleting review:', error);
-        toast.error('Failed to delete review');
-      } finally {
-        setIsDeleting(false);
-      }
-    }
-  };
-
+  const [isHovered, setIsHovered] = useState(false);
+  const isCurrentUserReview = currentUser && review.user?._id === currentUser._id;
+  
   return (
-    <div className="border-b border-gray-200 pb-6 last:border-0 last:pb-0">
-      <div className="flex items-start justify-between">
-        <div className="flex items-start space-x-3">
+    <motion.div 
+      className="bg-space-black/30 backdrop-blur-sm border border-deep-purple/20 rounded-xl p-6 mb-4"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div className="flex justify-between items-start">
+        <div className="flex items-start space-x-4">
           <div className="flex-shrink-0">
-            {review.user.photo ? (
-              <img 
-                src={review.user.photo} 
-                alt={review.user.name} 
-                className="h-10 w-10 rounded-full object-cover"
-              />
-            ) : (
-              <FaUserCircle className="h-10 w-10 text-gray-400" />
-            )}
-          </div>
-          <div>
-            <h4 className="font-medium">{review.user.name}</h4>
-            <div className="flex items-center space-x-2 text-sm text-gray-500">
-              <StarRating rating={review.rating} size={14} readOnly />
-              <span>•</span>
-              <time dateTime={review.createdAt}>
-                {format(new Date(review.createdAt), 'MMM d, yyyy')}
-              </time>
+            <div className="h-10 w-10 rounded-full bg-deep-purple/20 flex items-center justify-center text-holographic-white/80">
+              {review.user?.name?.charAt(0)?.toUpperCase() || 'U'}
             </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center space-x-2">
+              <h4 className="font-medium text-holographic-white">
+                {review.user?.name || 'Anonymous User'}
+              </h4>
+              {isCurrentUserReview && (
+                <span className="text-xs bg-deep-purple/20 text-holographic-white/70 px-2 py-0.5 rounded-full">
+                  You
+                </span>
+              )}
+            </div>
+            
+            <div className="flex items-center mt-1">
+              <StarRating rating={review.rating} size={16} readOnly />
+              <span className="text-xs text-holographic-white/50 ml-2">
+                {format(new Date(review.createdAt), 'MMM d, yyyy')}
+              </span>
+            </div>
+            
+            <p className="mt-2 text-holographic-white/80 leading-relaxed whitespace-pre-line">
+              {review.review}
+            </p>
           </div>
         </div>
         
-        {isCurrentUserReview && !isEditing && (
-          <div className="flex space-x-2">
+        {isCurrentUserReview && (
+          <motion.div 
+            className="flex space-x-2 opacity-0"
+            animate={{ opacity: isHovered ? 1 : 0 }}
+            transition={{ duration: 0.2 }}
+          >
             <button
-              onClick={() => setIsEditing(true)}
-              className="text-sm text-blue-600 hover:text-blue-800"
-              disabled={isDeleting}
+              onClick={() => onUpdate && onUpdate(review)}
+              className="p-1.5 text-holographic-white/60 hover:text-tech-blue hover:bg-holographic-white/5 rounded-full transition-colors"
+              title="Edit review"
             >
-              Edit
+              <FaEdit className="h-4 w-4" />
             </button>
             <button
-              onClick={handleDelete}
-              className="text-sm text-red-600 hover:text-red-800"
-              disabled={isDeleting}
+              onClick={() => onDelete && onDelete(review._id)}
+              className="p-1.5 text-holographic-white/60 hover:text-flame-red hover:bg-holographic-white/5 rounded-full transition-colors"
+              title="Delete review"
             >
-              {isDeleting ? 'Deleting...' : 'Delete'}
+              <FaTrash className="h-4 w-4" />
             </button>
-          </div>
+          </motion.div>
         )}
       </div>
-      
-      <div className="mt-3 pl-13">
-        {isEditing ? (
-          <ReviewForm
-            eventId={review.event}
-            user={currentUser}
-            existingReview={review}
-            onSuccess={handleUpdateSuccess}
-          />
-        ) : (
-          <p className="text-gray-700 whitespace-pre-line">{review.review}</p>
-        )}
-      </div>
-    </div>
+    </motion.div>
   );
 };
 
