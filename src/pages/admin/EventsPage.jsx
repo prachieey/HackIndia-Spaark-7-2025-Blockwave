@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, Plus, Loader2 } from 'lucide-react';
 import CreateEventModal from '../../components/admin/CreateEventModal';
+// Using ethers v5
 import { ethers } from 'ethers';
+const formatEther = (value) => ethers.utils.formatEther(value);
 import { useWeb3 } from '../../contexts/blockchain/Web3Context';
 import { toast } from 'react-toastify';
 
@@ -128,7 +130,7 @@ const AdminEventsPage = () => {
                         {event.ticketsSold} / {event.ticketsAvailable}
                       </td>
                       <td className="py-4 text-sm text-gray-300">
-                        {ethers.utils.formatEther(event.price * event.ticketsSold)} ETH
+                        {formatEther(event.price * event.ticketsSold)} ETH
                       </td>
                       <td className="py-4 text-sm font-medium text-right">
                         <button className="text-blue-500 hover:text-blue-400 mr-4">Edit</button>

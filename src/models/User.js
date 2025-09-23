@@ -20,7 +20,6 @@ const userSchema = new mongoose.Schema(
     walletAddress: {
       type: String,
       required: [true, 'Please provide your wallet address'],
-      unique: true,
       trim: true,
       lowercase: true,
     },
@@ -151,4 +150,11 @@ userSchema.methods.createPasswordResetToken = function () {
   return resetToken;
 };
 
-export default mongoose.model('User', userSchema);
+// Create indexes
+userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ walletAddress: 1 }, { unique: true });
+
+// Export the model
+const User = mongoose.model('User', userSchema);
+
+export default User;

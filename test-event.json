@@ -1,0 +1,32 @@
+{
+  "title": "Test Event",
+  "description": "This is a test event created via API",
+  "summary": "A test event for API testing",
+  "organizer": "68c7b240bd9936081c0e71f3",
+  "contractEventId": 12345,
+  "category": "conference",
+  "bannerImage": "https://example.com/test-banner.jpg",
+  "gallery": ["https://example.com/test1.jpg", "https://example.com/test2.jpg"],
+  "startDate": "2025-12-01T10:00:00.000Z",
+  "endDate": "2025-12-02T18:00:00.000Z",
+  "timezone": "Asia/Kolkata",
+  "ticketTypes": [
+    {
+      "name": "General Admission",
+      "description": "Standard ticket",
+      "price": 1000,
+      "currency": "USDT",
+      "quantity": 100,
+      "saleStart": "2025-11-01T00:00:00.000Z",
+      "saleEnd": "2025-11-30T23:59:59.000Z"
+    }
+  ],
+  "venue": {
+    "name": "Test Venue",
+    "address": "123 Test St, Test City",
+    "city": "Test City",
+    "coordinates": [77.2090, 28.6139],
+    "isVirtual": false
+  },
+  "tags": ["test", "conference", "tech"]
+}

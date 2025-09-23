@@ -1,0 +1,309 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  ArrowLeft, 
+  ArrowRight, 
+  Calendar, 
+  Check, 
+  Clock, 
+  DollarSign, 
+  Image as ImageIcon, 
+  MapPin, 
+  Plus, 
+  Tag, 
+  Ticket, 
+  Upload, 
+  Users,  
+  X,
+  Loader2,
+  ImagePlus,
+  CalendarDays,
+  Globe,
+  Link as LinkIcon
+} from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { useWeb3 } from '../contexts/blockchain/Web3Context';
+import { toast } from 'react-hot-toast';
+import { events } from '../utils/api';
+import { useDropzone } from 'react-dropzone';
+import { format, addDays, parseISO } from 'date-fns';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+
+// Import custom fonts
+import '@fontsource/playfair-display/700.css';
+import '@fontsource/poppins/400.css';
+import '@fontsource/poppins/500.css';
+import '@fontsource/poppins/600.css';
+import '@fontsource/poppins/700.css';
+
+// Custom Components
+const StepIndicator = ({ currentStep, totalSteps, steps }) => (
+  <div className="mb-8">
+    <div className="flex items-center justify-between">
+      {steps.map((step, index) => (
+        <React.Fragment key={step.id}>
+          <div className="flex flex-col items-center">
+            <div 
+              className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${
+                currentStep >= step.id 
+                  ? 'bg-primary-500 text-white' 
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
+              }`}
+            >
+              {currentStep > step.id ? <Check className="h-5 w-5" /> : step.id}
+            </div>
+            <span className="mt-2 text-xs font-medium text-gray-500 dark:text-gray-400">
+              {step.name}
+            </span>
+          </div>
+          {index < steps.length - 1 && (
+            <div className="flex-1 h-1 mx-2 bg-gray-200 dark:bg-gray-700 rounded-full">
+              <div 
+                className={`h-full rounded-full transition-all duration-300 ${
+                  currentStep > step.id ? 'bg-primary-500' : 'bg-transparent'
+                }`}
+                style={{ width: currentStep > step.id ? '100%' : '0%' }}
+              />
+            </div>
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  </div>
+);
+
+const FormCard = ({ children, title, step, totalSteps, className = '' }) => (
+  <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden ${className}`}>
+    {(title || (step !== undefined && totalSteps !== undefined)) && (
+      <div className="border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white">{title}</h2>
+          {step !== undefined && totalSteps !== undefined && (
+            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              Step {step} of {totalSteps}
+            </span>
+          )}
+        </div>
+      </div>
+    )}
+    <div className="p-6">
+      {children}
+    </div>
+  </div>
+);
+
+const Input = ({ 
+  label, 
+  icon: Icon, 
+  error, 
+  required = false, 
+  className = '', 
+  containerClassName = '',
+  ...props 
+}) => (
+  <div className={`mb-4 ${containerClassName}`}>
+    {label && (
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </label>
+    )}
+    <div className="relative">
+      {Icon && (
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <Icon className="h-5 w-5 text-gray-400" />
+        </div>
+      )}
+      <input
+        className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors duration-200 ${
+          error
+            ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
+            : 'border-gray-200 dark:border-gray-700 focus:ring-primary-200 dark:bg-gray-700 dark:text-white'
+        } ${Icon ? 'pl-10' : ''} ${className}`}
+        {...props}
+      />
+    </div>
+    {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+  </div>
+);
+
+const TextArea = ({ 
+  label, 
+  error, 
+  required = false, 
+  className = '', 
+  rows = 4, 
+  ...props 
+}) => (
+  <div className="mb-4">
+    {label && (
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </label>
+    )}
+    <textarea
+      rows={rows}
+      className={`w-full px-4 py-2 border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-colors duration-200 ${
+        error
+          ? 'border-red-400 focus:border-red-500 focus:ring-red-200'
+          : 'border-gray-200 dark:border-gray-700 focus:ring-primary-200 dark:bg-gray-700 dark:text-white'
+      } ${className}`}
+      {...props}
+    />
+    {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+  </div>
+);
+
+const Button = ({ 
+  children, 
+  loading = false, 
+  variant = 'primary',
+  size = 'md',
+  fullWidth = false,
+  className = '',
+  ...props 
+}) => {
+  const baseStyles = 'inline-flex items-center justify-center rounded-lg font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-70 disabled:cursor-not-allowed';
+  
+  const variants = {
+    primary: 'bg-primary-500 text-white hover:bg-primary-600 focus:ring-primary-500',
+    secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-500 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600',
+    danger: 'bg-red-500 text-white hover:bg-red-600 focus:ring-red-500',
+    outline: 'bg-transparent border-2 border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-500 dark:border-gray-600 dark:text-white dark:hover:bg-gray-700',
+    link: 'bg-transparent text-primary-500 hover:text-primary-600 hover:underline focus:ring-primary-500',
+  };
+
+  const sizes = {
+    sm: 'px-3 py-1.5 text-sm',
+    md: 'px-4 py-2 text-base',
+    lg: 'px-6 py-3 text-lg',
+  };
+
+  return (
+    <button
+      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${
+        fullWidth ? 'w-full' : ''
+      } ${className}`}
+      disabled={loading}
+      {...props}
+    >
+      {loading ? (
+        <>
+          <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
+          Processing...
+        </>
+      ) : (
+        children
+      )}
+    </button>
+  );
+};
+
+const ImageUpload = ({ onImageUpload, error, className = '' }) => {
+  const [preview, setPreview] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const onDrop = useCallback((acceptedFiles) => {
+    const file = acceptedFiles[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setPreview(reader.result);
+        onImageUpload(file);
+      };
+      reader.readAsDataURL(file);
+    }
+  }, [onImageUpload]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'image/*': ['.jpeg', '.jpg', '.png', '.webp']
+    },
+    maxFiles: 1,
+    onDragEnter: () => setIsDragging(true),
+    onDragLeave: () => setIsDragging(false),
+    onDrop: () => setIsDragging(false),
+  });
+
+  return (
+    <div className={`w-full ${className}`}>
+      <div
+        {...getRootProps()}
+        className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors duration-200 ${
+          isDragActive || isDragging
+            ? 'border-primary-500 bg-primary-50 dark:bg-gray-700/50'
+            : 'border-gray-300 hover:border-primary-400 dark:border-gray-600 dark:hover:border-primary-500'
+        } ${error ? 'border-red-400' : ''}`}
+      >
+        <input {...getInputProps()} />
+        {preview ? (
+          <div className="relative">
+            <img
+              src={preview}
+              alt="Preview"
+              className="mx-auto max-h-60 rounded-lg object-cover"
+            />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setPreview(null);
+                onImageUpload(null);
+              }}
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700">
+              <Upload className="h-6 w-6 text-gray-400" />
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-300">
+              <p className="font-medium">
+                <span className="text-primary-500 hover:text-primary-600">Upload a file</span> or drag and drop
+              </p>
+              <p className="text-xs">PNG, JPG, WEBP up to 5MB</p>
+            </div>
+          </div>
+        )}
+      </div>
+      {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+    </div>
+  );
+};
+
+// Custom DatePicker Input Component
+const CustomDateInput = ({ value, onClick, icon: Icon, label, error }) => (
+  <div className="w-full">
+    <div 
+      onClick={onClick}
+      className={`flex items-center px-4 py-2.5 text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700 border-2 rounded-lg cursor-pointer ${
+        error 
+          ? 'border-red-400 focus:border-red-500' 
+          : 'border-gray-200 dark:border-gray-700 focus:border-primary-500'
+      } focus:outline-none transition-colors duration-200`}
+    >
+      {Icon && <Icon className="w-5 h-5 mr-3 text-gray-400" />}
+      <span className="flex-1 text-left">{value || label}</span>
+      <Calendar className="w-5 h-5 text-gray-400" />
+    </div>
+    {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+  </div>
+);
+
+// Main Component
+const CreateEventPage = () => {
+  // ... rest of your CreateEventPage component code ...
+  
+  return (
+    // ... your JSX ...
+  );
+};
+
+export default CreateEventPage;

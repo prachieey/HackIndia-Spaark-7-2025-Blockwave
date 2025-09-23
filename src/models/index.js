@@ -1,30 +1,36 @@
-const mongoose = require('mongoose');
-const User = require('./User');
-const Event = require('./Event');
-const Ticket = require('./Ticket');
+import mongoose from 'mongoose';
+import User from './User.js';
+import Event from './Event.js';
+import Ticket from './Ticket.js';
 
 // Export all models
-module.exports = {
+const connection = mongoose.connection;
+
+export {
   User,
   Event,
   Ticket,
-  connection: mongoose.connection,
+  connection,
 };
 
-// Create indexes in non-production environments
-if (process.env.NODE_ENV !== 'production') {
+// Disable auto index creation to prevent conflicts
+mongoose.set('autoIndex', false);
+
+// Create indexes in non-production environments - disabled to prevent conflicts
+if (process.env.NODE_ENV !== 'production' && process.env.CREATE_INDEXES === 'true') {
   const createIndexes = async () => {
     try {
-      await User.ensureIndexes();
-      await Event.ensureIndexes();
-      await Ticket.ensureIndexes();
+      console.log('Creating database indexes...');
+      await User.syncIndexes();
+      await Event.syncIndexes();
+      await Ticket.syncIndexes();
       console.log('Database indexes created/verified');
     } catch (error) {
       console.error('Error creating indexes:', error);
     }
   };
 
-  // Only run in development
+  // Only run if explicitly enabled
   if (process.env.NODE_ENV === 'development') {
     createIndexes();
   }

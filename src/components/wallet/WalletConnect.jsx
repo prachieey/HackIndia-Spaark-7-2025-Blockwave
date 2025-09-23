@@ -54,31 +54,66 @@ const WalletConnect = () => {
       return;
     }
     
+    // Check if MetaMask is installed
     if (!window.ethereum) {
-      const errorMsg = 'No ethereum provider found. Please install MetaMask!';
+      const errorMsg = 'MetaMask not detected. Please install MetaMask to continue.';
       console.error(errorMsg);
       toast.error(errorMsg);
-      setConnectionError(errorMsg);
+      window.open('https://metamask.io/download.html', '_blank');
       return;
     }
     
     try {
       setIsConnecting(true);
       setConnectionError('');
-      console.log('Initiating wallet connection...');
       
+      console.log('1. Checking if already connected...');
+      if (isConnected && account) {
+        console.log('Already connected with account:', account);
+        return;
+      }
+      
+      console.log('2. Requesting accounts...');
+      // Request account access - this should trigger the MetaMask popup
+      const accounts = await window.ethereum.request({ 
+        method: 'eth_requestAccounts' 
+      });
+      
+      console.log('3. Received accounts:', accounts);
+      
+      if (!accounts || accounts.length === 0) {
+        throw new Error('No accounts found. Please check your wallet.');
+      }
+      
+      console.log('4. Connecting wallet...');
       const success = await connectWallet();
-      console.log('connectWallet result:', success);
+      console.log('5. Wallet connection result:', success);
       
       if (!success) {
-        const errorMsg = 'Failed to connect wallet. Please try again.';
-        console.error(errorMsg);
-        toast.error(errorMsg);
-        setConnectionError(errorMsg);
+        throw new Error('Failed to connect wallet. Please try again.');
       }
+      
+      console.log('6. Wallet connected successfully');
+      toast.success('Wallet connected successfully!');
+      
     } catch (err) {
-      const errorMsg = err.message || 'Failed to connect wallet';
       console.error('Wallet connection error:', err);
+      
+      let errorMsg = 'Failed to connect wallet';
+      if (err.code === 4001) {
+        errorMsg = 'Please connect to MetaMask to continue.';
+      } else if (err.code === -32002) {
+        errorMsg = 'A connection request is already pending. Please check your MetaMask extension.';
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      
+      console.error('Error details:', {
+        code: err.code,
+        message: err.message,
+        stack: err.stack
+      });
+      
       toast.error(errorMsg);
       setConnectionError(errorMsg);
     } finally {
@@ -108,7 +143,7 @@ const WalletConnect = () => {
           <div className="flex items-center space-x-2">
             <div className="w-2.5 h-2.5 rounded-full bg-green-400"></div>
             <span 
-              className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-help"
+              className="text-sm font-mono text-gray-800 dark:text-gray-200 cursor-help tracking-tight"
               title={account}
             >
               {formatAddress(account)}

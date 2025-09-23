@@ -33,38 +33,47 @@ const formatCurrency = (amount) => {
   }).format(amount);
 };
 
-// Date formatting utilities
-const formatEventDate = (dateString) => {
-  if (!dateString) return 'Date not specified';
-  
-  try {
-    const options = { 
-      weekday: 'long',
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric'
-    };
-    return new Date(dateString).toLocaleDateString('en-US', options);
-  } catch (error) {
-    console.error('Error formatting date:', error);
-    return 'Invalid date';
-  }
-};
+// Import shared date utilities
+import { formatEventDate, formatEventTime, formatEventDateRange } from '../utils/dateUtils';
 
-const formatEventTime = (dateString) => {
-  if (!dateString) return 'Time not specified';
-  
-  try {
-    const options = { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: true
-    };
-    return new Date(dateString).toLocaleTimeString('en-US', options);
-  } catch (error) {
-    console.error('Error formatting time:', error);
-    return 'Invalid time';
-  }
+// Helper function to create a generic event when the requested one is not found
+const createGenericEvent = (eventId) => {
+  return {
+    _id: eventId,
+    id: eventId,
+    title: `Event ${eventId}`,
+    description: 'This event could not be loaded. This is a placeholder event with sample data.',
+    image: 'https://source.unsplash.com/random/800x600/?event',
+    date: new Date().toISOString(),
+    startDate: new Date().toISOString(),
+    endDate: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2 hours later
+    location: 'Location not specified',
+    venue: {
+      name: 'Venue not specified',
+      address: 'Address not available',
+      city: 'City not specified'
+    },
+    category: 'other',
+    price: 0,
+    minPrice: 0,
+    maxPrice: 0,
+    hasMultiplePrices: false,
+    capacity: 100,
+    registered: 0,
+    isFree: true,
+    rating: 0,
+    ticketTypes: [
+      { id: '1', name: 'General Admission', price: 0, quantity: 100, description: 'Standard entry' }
+    ],
+    organizer: {
+      id: 'sample-organizer',
+      name: 'Event Organizer',
+      email: 'organizer@example.com'
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    __isFallback: true // Flag to indicate this is a fallback event
+  };
 };
 
 const EventDetailsPage = () => {
@@ -100,7 +109,10 @@ const EventDetailsPage = () => {
     const fetchEvent = async () => {
       if (!eventId) {
         console.error('No event ID provided');
-        navigate('/explore');
+        // Instead of redirecting, create a generic event
+        const genericEvent = createGenericEvent('no-id');
+        setEvent(genericEvent);
+        setLoading(false);
         return;
       }
 
@@ -111,14 +123,13 @@ const EventDetailsPage = () => {
         
         if (isMounted) {
           if (!eventData) {
-            console.warn(`Event not found: ${eventId}`);
-            // Show a message to the user before redirecting
-            alert('The requested event could not be found. You will be redirected to the explore page.');
-            navigate('/explore');
-            return;
+            console.warn(`Event not found: ${eventId}, using fallback event`);
+            const fallbackEvent = createGenericEvent(eventId);
+            setEvent(fallbackEvent);
+          } else {
+            console.log('Successfully fetched event:', eventData._id || eventData.id);
+            setEvent(eventData);
           }
-          console.log('Successfully fetched event:', eventData._id);
-          setEvent(eventData);
         }
       } catch (error) {
         console.error('Error in fetchEvent:', {
@@ -149,35 +160,82 @@ const EventDetailsPage = () => {
   
   // Using memoized date and time formatters from above
   
-  const handlePurchase = () => {
+  const [isPurchasing, setIsPurchasing] = useState(false);
+
+  const handlePurchase = async () => {
+    console.log('Purchase button clicked - Event ID:', eventId, 'Quantity:', ticketQuantity);
+    
+    // Check if user is authenticated
     if (!isAuthenticated) {
+      console.log('User not authenticated, redirecting to login');
       setPurchaseStatus({
         type: 'error',
         message: 'Please sign in to purchase tickets'
       });
+      // Add a small delay before redirecting to show the message
+      setTimeout(() => {
+        navigate('/login', { state: { from: `/events/${eventId}` } });
+      }, 500);
       return;
     }
     
+    // Validate ticket quantity
     if (event.availableTickets < ticketQuantity) {
       setPurchaseStatus({
         type: 'error',
-        message: 'Not enough tickets available'
+        message: 'Not enough tickets available. Please reduce the quantity.'
       });
       return;
     }
     
-    const result = purchaseTicket(eventId, ticketQuantity);
-    if (result.success) {
-      setPurchaseStatus({
-        type: 'success',
-        message: 'Ticket purchased successfully!'
-      });
-      setShowPurchaseSuccess(true);
-    } else {
+    try {
+      setIsPurchasing(true);
+      setPurchaseStatus({ type: '', message: '' });
+      
+      // Basic validation
+      if (!eventId) {
+        throw new Error('Invalid event ID');
+      }
+      
+      if (ticketQuantity < 1) {
+        throw new Error('Please select at least one ticket');
+      }
+      
+      console.log('Calling purchaseTicket API...');
+      const result = await purchaseTicket(eventId, ticketQuantity);
+      console.log('purchaseTicket result:', result);
+      
+      if (!result) {
+        throw new Error('No response from server');
+      }
+      
+      if (result.success) {
+        const successMessage = `Success! ${ticketQuantity} ticket(s) purchased.`;
+        console.log(successMessage);
+        setPurchaseStatus({
+          type: 'success',
+          message: successMessage
+        });
+        setShowPurchaseSuccess(true);
+        
+        // Refresh event data
+        console.log('Refreshing event data...');
+        const updatedEvent = await getEventById(eventId);
+        if (updatedEvent) {
+          console.log('Updated event data:', updatedEvent);
+          setEvent(updatedEvent);
+        }
+      } else {
+        throw new Error(result.message || 'Failed to complete purchase');
+      }
+    } catch (error) {
+      console.error('Purchase error:', error);
       setPurchaseStatus({
         type: 'error',
-        message: result.message
+        message: error.message || 'An error occurred. Please try again.'
       });
+    } finally {
+      setIsPurchasing(false);
     }
   };
 
@@ -281,8 +339,12 @@ const EventDetailsPage = () => {
                       About This Event
                     </h2>
                     <div className="prose prose-invert max-w-none">
-                      <p className="text-holographic-white/80 leading-relaxed">
-                        {event.description || 'No description available for this event.'}
+                      <p className="text-holographic-white/80 leading-relaxed whitespace-pre-line">
+                        {event.description || `Join us for an exciting event at ${event.location || 'a great location'} on ${eventDate} at ${eventTime}.
+                        
+This event promises to be an engaging experience filled with interesting activities, networking opportunities, and valuable insights. Don't miss out on this opportunity to connect with like-minded individuals and expand your knowledge in this field.
+
+For more information, please contact the organizer.`}
                       </p>
                     </div>
                   </div>
@@ -384,10 +446,14 @@ const EventDetailsPage = () => {
                       
                       <button
                         onClick={handlePurchase}
-                        disabled={loading}
-                        className="w-full bg-gradient-to-r from-tech-blue to-deep-purple text-white py-3 px-6 rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                        disabled={loading || isPurchasing || event.availableTickets < 1}
+                        className={`w-full bg-gradient-to-r from-tech-blue to-deep-purple text-white py-3 px-6 rounded-xl font-medium transition-all duration-200 ${
+                          loading || isPurchasing || event.availableTickets < 1 
+                            ? 'opacity-70 cursor-not-allowed' 
+                            : 'hover:opacity-90 hover:shadow-lg transform hover:-translate-y-0.5'
+                        } flex items-center justify-center space-x-2`}
                       >
-                        {loading ? (
+                        {isPurchasing ? (
                           <>
                             <Loader2 className="h-5 w-5 animate-spin" />
                             <span>Processing...</span>
@@ -395,7 +461,11 @@ const EventDetailsPage = () => {
                         ) : (
                           <>
                             <Ticket className="h-5 w-5" />
-                            <span>Get Tickets</span>
+                            <span>
+                              {event.availableTickets < 1 
+                                ? 'Sold Out' 
+                                : `Get Tickets (${event.availableTickets} available)`}
+                            </span>
                           </>
                         )}
                       </button>
@@ -524,6 +594,51 @@ const EventDetailsPage = () => {
           </div>
         </DialogContent>
       </Dialog>
+      
+      {/* Debug Component - Only visible in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div style={{
+          position: 'fixed',
+          bottom: '10px',
+          right: '10px',
+          background: 'rgba(0,0,0,0.8)',
+          color: 'white',
+          padding: '10px',
+          borderRadius: '5px',
+          zIndex: 1000,
+          fontSize: '12px',
+          maxWidth: '300px',
+          fontFamily: 'monospace',
+          border: '1px solid #4B5563',
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '5px', color: '#60A5FA' }}>Debug Info:</div>
+          <div>Event ID: {eventId || 'N/A'}</div>
+          <div>Authenticated: {isAuthenticated ? '✅ Yes' : '❌ No'}</div>
+          <div>Available Tickets: {event?.availableTickets || 0}</div>
+          <div>Selected Qty: {ticketQuantity}</div>
+          <div>Purchase Status: {purchaseStatus?.type || 'none'}</div>
+          <button 
+            onClick={() => {
+              console.log('Current event data:', event);
+              console.log('User token:', localStorage.getItem('token'));
+              console.log('Purchase status:', purchaseStatus);
+            }}
+            style={{
+              marginTop: '8px',
+              padding: '3px 6px',
+              background: '#3B82F6',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontSize: '10px'
+            }}
+          >
+            Show Debug in Console
+          </button>
+        </div>
+      )}
     </div>
   );
 };

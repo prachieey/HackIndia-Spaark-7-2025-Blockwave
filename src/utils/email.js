@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import pug from 'pug';
 import { htmlToText } from 'html-to-text';
-import logger from './logger.js';
+import { logger } from './logger.js';
 
 // Simple email sender for development
 const sendEmail = async (options) => {
@@ -96,4 +96,7 @@ class Email {
   }
 }
 
-export default sendEmail;
+// Add default export for backward compatibility
+const defaultExport = { sendEmail, Email };
+export { sendEmail, Email };
+export default defaultExport;

@@ -1,215 +1,143 @@
 import dotenv from 'dotenv';
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import mongoose from 'mongoose';
-import morgan from 'morgan';
-
-// Import routes
-import userRoutes from './src/routes/userRoutes.js';
-import eventRoutes from './src/routes/eventRoutes.js';
-import ticketRoutes from './src/routes/ticketRoutes.js';
-import authRoutes from './src/routes/authRoutes.js';
+import http from 'http';
+import { WebSocketServer } from 'ws';
+import app from './app.js';
+import { connectDB } from './src/config/database-connection.js';
 
 // Load environment variables
 dotenv.config();
 
-// Initialize express app
-const app = express();
+// Set default port
 const PORT = process.env.PORT || 5001;
-const MONGODB_URI = process.env.MONGODB_URI_DEV || 'mongodb://127.0.0.1:27017/scantyx-dev';
 
-// Set security HTTP headers with CSP configuration
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: [
-          "'self'",
-          "'unsafe-inline'",
-          "'unsafe-eval'"
-        ],
-        styleSrc: [
-          "'self'",
-          "'unsafe-inline'"
-        ],
-        imgSrc: [
-          "'self'",
-          'data:',
-          'https:'
-        ],
-        connectSrc: [
-          "'self'",
-          'http://localhost:*',
-          'ws://localhost:*',
-          'wss://*',
-          'https://*'
-        ],
-        fontSrc: [
-          "'self'",
-          'data:',
-          'https:'
-        ],
-        frameSrc: [
-          "'self'",
-          'https:'
-        ],
-        workerSrc: [
-          "'self'",
-          'blob:',
-          'data:'
-        ]
-      }
+// WebSocket server setup
+const server = http.createServer(app);
+const wss = new WebSocketServer({ 
+  server,
+  // Handle protocol upgrade manually to properly parse the URL
+  verifyClient: (info, done) => {
+    // Extract the URL path from the request
+    const fullUrl = new URL(`ws://${info.req.headers.host}${info.req.url}`);
+    info.req.url = fullUrl.pathname; // Store the path for later use
+    return done(true);
+  }
+});
+
+// Store connected clients
+const clients = new Map(); // Using Map to store clients by path
+
+// WebSocket connection handler
+wss.on('connection', (ws, req) => {
+  console.log('New WebSocket connection');
+  
+  // Get the path from the request URL
+  const path = req.url || '/';
+  console.log(`WebSocket connected to path: ${path}`);
+  
+  console.log('WebSocket connected to path:', path);
+  
+  // Store the path with the WebSocket connection
+  ws.path = path;
+  
+  // Add new client
+  clients.add(ws);
+  
+  // Handle messages from client
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message);
+      console.log(`Received on ${path}:`, data);
+      
+      // Broadcast to all clients on the same path except the sender
+      broadcast(JSON.stringify(data), ws, path);
+    } catch (error) {
+      console.error('Error parsing message:', error);
     }
-  })
-);
+  });
+  
+  // Handle client disconnection
+  ws.on('close', () => {
+    console.log('Client disconnected from path:', path);
+    clients.delete(ws);
+  });
+  
+  // Handle errors
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
+  });
+});
 
-// Enable CORS
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:5174',
-  process.env.FRONTEND_URL
-].filter(Boolean);
-
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = `The CORS policy for this site does not allow access from the specified origin: ${origin}`;
-      console.warn(msg);
-      return callback(new Error(msg), false);
+// Function to broadcast to clients on the same path
+function broadcast(message, sender, path) {
+  let clientsToNotify = clients;
+  
+  // If path is provided, only send to clients on the same path
+  if (path) {
+    clientsToNotify = Array.from(clients).filter(client => client.path === path);
+  }
+  
+  for (const client of clientsToNotify) {
+    // Don't send back to the sender if it's a broadcast
+    if (client !== sender && client.readyState === 1) { // 1 = OPEN
+      client.send(message);
     }
-    return callback(null, true);
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// Development logging
-if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
+  }
 }
 
-// Body parser
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+// Load environment variables
+const requiredEnvVars = ['JWT_SECRET', 'MONGODB_URI'];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
-// Simple request time middleware
-app.use((req, res, next) => {
-  req.requestTime = new Date().toISOString();
-  next();
+if (missingVars.length > 0) {
+  console.error(`❌ Missing required environment variables: ${missingVars.join(', ')}`);
+  process.exit(1);
+}
+
+console.log('Starting server with port:', PORT);
+console.log('WebSocket server will run on port:', PORT);
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION! Shutting down...');
+  console.error(err.name, err.message);
+  // Close server & exit process
+  process.exit(1);
 });
 
-// API root endpoint
-app.get('/api', (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'Welcome to the Scantyx API',
-    endpoints: {
-      auth: '/api/v1/auth',
-      users: '/api/v1/users',
-      events: '/api/v1/events',
-      tickets: '/api/v1/tickets',
-      health: '/api/health'
-    },
-    documentation: 'Coming soon...'
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+  console.error('UNHANDLED REJECTION! Shutting down...');
+  console.error(err.name, err.message);
+  // Close server & exit process
+  server.close(() => {
+    process.exit(1);
   });
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    message: 'Server is running',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+// Handle SIGTERM for graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM RECEIVED. Shutting down gracefully');
+  server.close(() => {
+    console.log('Process terminated!');
   });
-});
-
-// Debug middleware to log all incoming requests
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  next();
-});
-
-// Routes with logging
-console.log('Mounting routes...');
-console.log('  - /api/v1/users');
-console.log('  - /api/v1/events');
-console.log('  - /api/v1/tickets');
-console.log('  - /api/v1/auth');
-
-app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/events', eventRoutes);
-app.use('/api/v1/tickets', ticketRoutes);
-app.use('/api/v1/auth', authRoutes);
-
-console.log('Routes mounted successfully');
-
-// Serve static files from the dist directory
-app.use(express.static('dist'));
-
-// Handle client-side routing - return all requests to the app
-app.get('*', (req, res) => {
-  res.sendFile('index.html', { root: 'dist' });
-});
-
-// Handle API 404 - Not Found
-app.all('/api/*', (req, res) => {
-  res.status(404).json({
-    status: 'fail',
-    message: `Can't find ${req.originalUrl} on this server!`
-  });
-});
-
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('ERROR:', err);
-  
-  const statusCode = err.statusCode || 500;
-  const status = err.status || 'error';
-  const message = err.message || 'Something went wrong!';
-  
-  if (process.env.NODE_ENV === 'development') {
-    res.status(statusCode).json({
-      status,
-      message,
-      error: err,
-      stack: err.stack
-    });
-  } else {
-    res.status(statusCode).json({
-      status,
-      message: statusCode === 500 ? 'Something went wrong!' : message
-    });
-  }
 });
 
 // Connect to MongoDB and start server
 const startServer = async () => {
   try {
-    console.log('Connecting to MongoDB...');
-    await mongoose.connect(MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000
-    });
+    // Connect to MongoDB
+    await connectDB();
     
-    console.log('✅ MongoDB connected successfully');
-    
-    const server = app.listen(PORT, () => {
-      console.log(`✅ Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+    // Start the HTTP and WebSocket server
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+      console.log(`API URL: http://localhost:${PORT}`);
+      console.log(`WebSocket server running on ws://localhost:${PORT}`);
     });
 
     // Handle unhandled promise rejections
     process.on('unhandledRejection', (err) => {
-      console.log('UNHANDLED REJECTION! 💥 Shutting down...');
+      console.log('UNHANDLED REJECTION! Shutting down...');
       console.log(err.name, err.message);
       server.close(() => {
         process.exit(1);
@@ -232,5 +160,3 @@ const startServer = async () => {
 // Start the server
 console.log('Starting server...');
 startServer();
-
-export default app;

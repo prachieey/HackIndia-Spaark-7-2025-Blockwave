@@ -12,7 +12,7 @@ const filterObj = (obj, ...allowedFields) => {
 };
 
 // Get all users (Admin only)
-export const getAllUsers = catchAsync(async (req, res, next) => {
+const getAllUsers = catchAsync(async (req, res, next) => {
   const users = await User.find();
   
   res.status(200).json({
@@ -25,13 +25,13 @@ export const getAllUsers = catchAsync(async (req, res, next) => {
 });
 
 // Get current user profile
-export const getMe = (req, res, next) => {
+const getMe = (req, res, next) => {
   req.params.id = req.user.id;
   next();
 };
 
 // Get user by ID
-export const getUser = catchAsync(async (req, res, next) => {
+const getUser = catchAsync(async (req, res, next) => {
   const user = await User.findById(req.params.id);
 
   if (!user) {
@@ -47,7 +47,7 @@ export const getUser = catchAsync(async (req, res, next) => {
 });
 
 // Update current user data
-export const updateMe = catchAsync(async (req, res, next) => {
+const updateMe = catchAsync(async (req, res, next) => {
   // 1) Create error if user POSTs password data
   if (req.body.password || req.body.passwordConfirm) {
     return next(
@@ -82,7 +82,7 @@ export const updateMe = catchAsync(async (req, res, next) => {
 });
 
 // Delete current user (set active to false)
-export const deleteMe = catchAsync(async (req, res, next) => {
+const deleteMe = catchAsync(async (req, res, next) => {
   await User.findByIdAndUpdate(req.user.id, { active: false });
 
   res.status(204).json({
@@ -92,7 +92,7 @@ export const deleteMe = catchAsync(async (req, res, next) => {
 });
 
 // Create user (Admin only)
-export const createUser = catchAsync(async (req, res, next) => {
+const createUser = catchAsync(async (req, res, next) => {
   const newUser = await User.create({
     name: req.body.name,
     email: req.body.email,
@@ -113,7 +113,7 @@ export const createUser = catchAsync(async (req, res, next) => {
 });
 
 // Update user (Admin only)
-export const updateUser = catchAsync(async (req, res, next) => {
+const updateUser = catchAsync(async (req, res, next) => {
   const user = await User.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true,
@@ -132,7 +132,7 @@ export const updateUser = catchAsync(async (req, res, next) => {
 });
 
 // Delete user (Admin only)
-export const deleteUser = catchAsync(async (req, res, next) => {
+const deleteUser = catchAsync(async (req, res, next) => {
   const user = await User.findByIdAndDelete(req.params.id);
 
   if (!user) {
@@ -144,3 +144,14 @@ export const deleteUser = catchAsync(async (req, res, next) => {
     data: null,
   });
 });
+
+export {
+  getAllUsers,
+  getMe,
+  getUser,
+  updateMe,
+  deleteMe,
+  createUser,
+  updateUser,
+  deleteUser
+};

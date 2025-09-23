@@ -1,9 +1,11 @@
-import React, { useEffect } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Routes, Route, useLocation, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
 import CustomToast from './components/common/CustomToast';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import RegionSelection from './components/auth/RegionSelection';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 
 // Layouts
 import MainLayout from './layouts/MainLayout.jsx';
@@ -19,7 +21,7 @@ import CreateEventPage from './pages/CreateEventPage.jsx';
 import DemoPage from './pages/DemoPage.jsx';
 import ContactPage from './pages/ContactPage.jsx';
 import TestimonialsPage from './pages/TestimonialsPage.jsx';
-import LoginPage from './pages/LoginPage.jsx';
+// Login page has been removed - redirects to home
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import TicketsPage from './pages/TicketsPage.jsx';
 import TicketDetailPage from './pages/TicketDetailPage.jsx';
@@ -37,13 +39,21 @@ import UserTicketsPage from './pages/user/TicketsPage.jsx';
 import UserProfilePage from './pages/user/ProfilePage.jsx';
 import SettingsPage from './pages/user/SettingsPage.jsx';
 
+// Auth Pages
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
+
+// Components
+import AuthModal from './components/auth/AuthModal';
+
 // Context Providers
-import { AuthProvider } from './contexts/AuthContext.jsx';
+import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
+import { AuthModalProvider, useAuthModal } from './contexts/AuthModalContext.jsx';
 import { EventsProvider } from './contexts/EventsContext.jsx';
 import { Web3Provider } from './contexts/blockchain/Web3Context.jsx';
 import { ThemeProvider } from './contexts/ThemeContext.jsx';
-
-// Scroll to top on route change
+import { LocationProvider, useLocation as useLocationContext } from './contexts/LocationContext.jsx';
+import LocationSelector from './components/common/LocationSelector';
 
 // Scroll to top on route change
 const ScrollToTop = () => {
@@ -56,77 +66,194 @@ const ScrollToTop = () => {
   return null;
 };
 
+// Component to handle login redirect with modal
+const LoginRedirect = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { openAuthModal } = useAuthModal();
+  
+  useEffect(() => {
+    const redirect = searchParams.get('redirect') || '/';
+    openAuthModal('login');
+    // Don't navigate immediately, let the modal handle the navigation after login
+  }, [searchParams, openAuthModal]);
+  
+  return <Navigate to="/" replace />;
+};
+
+function AppContent() {
+  const { isOpen, closeAuthModal, mode, openAuthModal } = useAuthModal();
+  const { user, isAuthenticated } = useAuth();
+  const { selectedCity, updateLocation } = useLocationContext();
+  const location = useLocation();
+  const [showRegionSelector, setShowRegionSelector] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  
+  // Debug logs
+  useEffect(() => {
+    console.log('AppContent - User state:', { user, isAuthenticated });
+    console.log('AppContent - Current location state:', { selectedCity });
+  }, [user, isAuthenticated, selectedCity]);
+  
+  // Show location selector after successful login
+  useEffect(() => {
+    console.log('Checking if we should show location modal...', { 
+      user, 
+      isAuthenticated
+    });
+    
+    if (user && isAuthenticated) {
+      console.log('User is logged in, showing location modal');
+      // Small delay to allow the UI to update after login
+      const timer = setTimeout(() => {
+        setShowLocationModal(true);
+      }, 1000);
+      
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+  }, [user, isAuthenticated]);
+  
+  // This effect ensures the modal is properly initialized
+  useEffect(() => {
+    console.log('AuthModal state:', { isOpen, mode });
+  }, [isOpen, mode]);
+
+  const handleRegionSelectionClose = () => {
+    console.log('Closing region selection');
+    setShowRegionSelector(false);
+  };
+  
+  const handleLocationSelect = (city) => {
+    console.log('Location selected:', city);
+    if (city) {
+      updateLocation(city);
+      setShowLocationModal(false);
+      toast.success(`Location set to ${city}`);
+    } else {
+      console.error('No city provided to handleLocationSelect');
+    }
+  };
+  
+  const handleLocationModalClose = () => {
+    console.log('Location modal closed');
+    setShowLocationModal(false);
+  };
+
+  return (
+    <>
+      {showRegionSelector && (
+        <RegionSelection onClose={handleRegionSelectionClose} />
+      )}
+      
+      {/* Location Selector Modal */}
+      <LocationSelector 
+        isOpen={showLocationModal}
+        onClose={() => setShowLocationModal(false)}
+        onSelect={handleLocationSelect}
+      />
+      <Toaster 
+        position="top-center"
+        toastOptions={{
+          className: 'toast-notification',
+          duration: 5000,
+          style: {
+            background: 'white',
+            color: '#1F2937',
+            borderRadius: '0.5rem',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+          },
+          success: {
+            iconTheme: {
+              primary: '#10B981',
+              secondary: 'white',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#EF4444',
+              secondary: 'white',
+            },
+          },
+        }}
+      />
+      <CustomToast />
+      <ScrollToTop />
+      
+      {/* Auth Modal */}
+      <AuthModal 
+        isOpen={isOpen} 
+        onClose={closeAuthModal} 
+        authType={mode} 
+        setAuthType={(type) => openAuthModal(type)} 
+      />
+      <AnimatePresence mode="wait">
+        <Routes location={location} key={location.pathname}>
+          {/* Public Routes */}
+          <Route path="/" element={<MainLayout />}>
+            <Route index element={<HomePage />} />
+            <Route path="explore" element={<ExplorePage />} />
+            <Route path="events" element={<DemoPage />} />
+            <Route path="events/blockchain/:id" element={<BlockchainEventPage />} />
+            <Route path="events/:eventId" element={<EventDetailsPage />} />
+            <Route path="tickets" element={<TicketsPage />} />
+            <Route path="tickets/:id" element={<TicketDetailPage />} />
+            <Route path="/demo" element={<Navigate to="/events" replace />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/testimonials" element={<TestimonialsPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+            <Route path="/login" element={<LoginRedirect />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+
+          {/* Admin Routes */}
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboardPage />} />
+            <Route path="events" element={<AdminEventsPage />} />
+            <Route path="tickets" element={<AdminTicketsPage />} />
+            <Route path="users" element={<AdminUsersPage />} />
+            <Route path="wallet-test" element={<WalletTest />} />
+          </Route>
+
+          {/* User Routes */}
+          <Route path="/user" element={
+            <ProtectedRoute>
+              <UserLayout />
+            </ProtectedRoute>
+          }>
+            <Route path="dashboard" element={<UserDashboard />} />
+            <Route path="profile" element={<UserProfilePage />} />
+            <Route path="tickets" element={<UserTicketsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="create-event" element={<CreateEventPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+
+          {/* 404 Route */}
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </AnimatePresence>
+    </>
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
-        <Web3Provider>
-          <AuthProvider>
-            <EventsProvider>
-              <Toaster 
-                position="top-center"
-                toastOptions={{
-                  duration: 5000,
-                  style: {
-                    padding: 0,
-                    background: 'transparent',
-                    boxShadow: 'none',
-                    maxWidth: '100%',
-                  },
-                  success: {
-                    className: 'bg-green-100 text-green-800',
-                    icon: <div className="bg-green-200 text-green-600 p-1 rounded">✓</div>,
-                  },
-                  error: {
-                    className: 'bg-red-100 text-red-800',
-                    icon: <div className="bg-red-200 text-red-600 p-1 rounded">✕</div>,
-                  },
-                }}
-              />
-              {/* Custom toast notifications will be shown using the showToast function */}
-              <ScrollToTop />
-              <AnimatePresence mode="wait">
-              <Routes>
-                {/* Public Routes */}
-                <Route path="/" element={<MainLayout />}>
-                  <Route index element={<HomePage />} />
-                  <Route path="explore" element={<ExplorePage />} />
-                  <Route path="events/blockchain/:id" element={<BlockchainEventPage />} />
-                  <Route path="events/:eventId" element={<EventDetailsPage />} />
-                  <Route path="tickets" element={<TicketsPage />} />
-                  <Route path="tickets/:id" element={<TicketDetailPage />} />
-                  <Route path="demo" element={<DemoPage />} />
-                  <Route path="contact" element={<ContactPage />} />
-                  <Route path="testimonials" element={<TestimonialsPage />} />
-                  <Route path="login" element={<LoginPage />} />
-                </Route>
-
-                {/* Admin Routes */}
-                <Route path="/admin" element={<AdminLayout />}>
-                  <Route index element={<AdminDashboardPage />} />
-                  <Route path="events" element={<AdminEventsPage />} />
-                  <Route path="tickets" element={<AdminTicketsPage />} />
-                  <Route path="users" element={<AdminUsersPage />} />
-                  <Route path="wallet-test" element={<WalletTest />} />
-                </Route>
-
-                {/* User Routes */}
-                <Route path="/user" element={<UserLayout />}>
-                  <Route path="dashboard" element={<UserDashboard />} />
-                  <Route path="profile" element={<UserProfilePage />} />
-                  <Route path="tickets" element={<UserTicketsPage />} />
-                  <Route path="create-event" element={<CreateEventPage />} />
-                  <Route path="settings" element={<SettingsPage />} />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Route>
-
-                {/* 404 Route */}
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-              </AnimatePresence>
-            </EventsProvider>
-          </AuthProvider>
-        </Web3Provider>
+        <AuthProvider>
+          <AuthModalProvider>
+            <Web3Provider>
+              <EventsProvider>
+                <LocationProvider>
+                  <AppContent />
+                </LocationProvider>
+              </EventsProvider>
+            </Web3Provider>
+          </AuthModalProvider>
+        </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

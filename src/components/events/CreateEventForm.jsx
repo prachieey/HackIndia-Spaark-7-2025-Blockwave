@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { useWeb3 } from '../../contexts/blockchain/Web3Context';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'react-toastify';
+// Using ethers v5
 import { ethers } from 'ethers';
+const parseEther = (value) => ethers.utils.parseEther(value);
 
 export default function CreateEventForm({ onSuccess }) {
   const { createEvent, isConnected } = useWeb3();

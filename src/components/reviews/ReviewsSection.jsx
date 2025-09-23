@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import ReviewSummary from './ReviewSummary';
 import ReviewList from './ReviewList';
 import ReviewForm from './ReviewForm';
-import { getUserReviewForEvent, getEventReviews } from '../../services/reviewService';
+import { getUserReviewForEvent, getEventReviews, getEventReviewStats } from '../../services/reviewService';
 import { Button } from '../ui/button';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+import useWebSocket from '../../hooks/useWebSocket';
+import { Loader2 } from 'lucide-react';
 
 const ReviewsSection = ({ eventId }) => {
   const navigate = useNavigate();
@@ -15,56 +17,160 @@ const ReviewsSection = ({ eventId }) => {
   const [userReview, setUserReview] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reviews, setReviews] = useState([]);
-  const [showReviewForm, setShowReviewForm] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const fetchReviews = async () => {
+  
+  // Function to fetch reviews
+  const fetchReviews = useCallback(async () => {
     try {
       const reviewsData = await getEventReviews(eventId);
       setReviews(reviewsData);
     } catch (error) {
       console.error('Error fetching reviews:', error);
     }
-  };
+  }, [eventId]);
 
+  // State for review stats
+  const [reviewStats, setReviewStats] = useState({
+    averageRating: 0,
+    totalReviews: 0,
+    ratingCounts: {},
+    message: 'No reviews yet'
+  });
+
+  // Fetch review stats when the component mounts or when eventId changes
+  const fetchReviewStats = useCallback(async () => {
+    if (!eventId) return;
+    
+    try {
+      const stats = await getEventReviewStats(eventId);
+      setReviewStats(stats);
+    } catch (error) {
+      console.error('Error fetching review stats:', error);
+      toast.error('Failed to load review statistics');
+    }
+  }, [eventId]);
+
+  // WebSocket for real-time updates
+  const { sendMessage, isConnected } = useWebSocket(
+    eventId ? `/api/v1/events/${eventId}/reviews/ws` : null,
+    useCallback((message) => {
+      // Handle incoming WebSocket messages
+      if (message && message.type === 'NEW_REVIEW' && message.data && message.data.eventId === eventId) {
+        console.log('New review received via WebSocket:', message);
+        // Update reviews and stats when a new one is added
+        fetchReviews();
+        fetchReviewStats();
+      }
+    }, [eventId, fetchReviews, fetchReviewStats])
+  );
+
+  // Log WebSocket connection status
+  useEffect(() => {
+    const status = isConnected ? 'Connected' : 'Disconnected';
+    console.log(`WebSocket connection status: ${status} for event ${eventId}`);
+    
+    // Show a toast notification when connection status changes
+    if (isConnected) {
+      toast.success('Live updates enabled', {
+        position: 'bottom-right',
+        autoClose: 3000,
+        hideProgressBar: true,
+      });
+    } else if (!isConnected && eventId) {
+      toast.warn('Live updates disconnected. Reconnecting...', {
+        position: 'bottom-right',
+        autoClose: 3000,
+        hideProgressBar: true,
+      });
+    }
+  }, [isConnected, eventId]);
+  
+  // Function to notify about new review
+  const notifyNewReview = useCallback((review) => {
+    if (!isConnected) {
+      console.warn('Cannot send message: WebSocket is not connected');
+      return;
+    }
+    
+    try {
+      const message = {
+        type: 'NEW_REVIEW',
+        data: {
+          eventId,
+          reviewId: review._id,
+          userId: review.user?._id,
+          timestamp: new Date().toISOString()
+        }
+      };
+      
+      console.log('Sending WebSocket message:', message);
+      sendMessage(message);
+    } catch (error) {
+      console.error('Error sending WebSocket message:', error);
+    }
+  }, [eventId, sendMessage, isConnected]);
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fetch reviews and stats when the component mounts or when eventId changes
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
+        // Fetch user's review if authenticated
         if (isAuthenticated && currentUser?._id) {
-          const review = await getUserReviewForEvent(eventId);
-          setUserReview(review);
+          try {
+            const review = await getUserReviewForEvent(eventId);
+            setUserReview(review);
+          } catch (error) {
+            console.error('Error fetching user review:', error);
+            // Don't show error to user if it's just that they haven't reviewed yet
+            if (error.response?.status !== 404) {
+              toast.error('Failed to load your review');
+            }
+          }
         }
+        
+        // Fetch all reviews for the event
         await fetchReviews();
+        
+        // Fetch review statistics
+        await fetchReviewStats();
+        
       } catch (error) {
-        console.error('Error fetching review data:', error);
+        console.error('Error in fetchData:', error);
+        toast.error('Failed to load review data');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchData();
-  }, [eventId, currentUser, isAuthenticated]);
+    if (eventId) {
+      fetchData();
+    }
+  }, [eventId, currentUser, isAuthenticated, fetchReviews, fetchReviewStats]);
 
   const handleReviewSubmit = async (reviewData) => {
     if (!isAuthenticated) {
       navigate('/login', { state: { from: window.location.pathname } });
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
-      // Refresh both the user's review and all reviews
       const [userReviewData, allReviews] = await Promise.all([
         getUserReviewForEvent(eventId),
         getEventReviews(eventId)
       ]);
-      
+
       setUserReview(userReviewData);
       setReviews(allReviews);
       setShowReviewForm(false);
       
-      // Show success message
+      // Notify about the new review via WebSocket
+      if (userReviewData) {
+        notifyNewReview(userReviewData);
+      }
+
       toast.success('Your review has been submitted successfully!', {
         position: 'top-center',
         autoClose: 3000,
@@ -90,132 +196,89 @@ const ReviewsSection = ({ eventId }) => {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-      </div>
+      <section className="py-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="animate-pulse space-y-6">
+            <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+            <div className="h-32 bg-gray-100 rounded"></div>
+          </div>
+        </div>
+      </section>
     );
   }
 
+  const hasReviews = reviews.length > 0;
+
   return (
     <section className="py-8">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-holographic-white">
-          <i className="fas fa-star text-yellow-400 mr-2"></i>
-          Reviews & Ratings
-        </h2>
-        
-        {isAuthenticated && !userReview && !showReviewForm && (
-          <Button 
-            onClick={() => setShowReviewForm(true)}
-            className="bg-gradient-to-r from-tech-blue to-deep-purple hover:opacity-90 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 flex items-center"
-            disabled={isSubmitting}
-          >
-            <i className="fas fa-pen mr-2"></i>
-            {isSubmitting ? 'Submitting...' : 'Write a Review'}
-          </Button>
-        )}
-      </div>
-      
-      <div className="space-y-8">
-        <ReviewSummary eventId={eventId} reviews={reviews} />
-        
-        <AnimatePresence>
-          {showReviewForm && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-              className="bg-space-black/80 backdrop-blur-sm border border-deep-purple/20 rounded-xl p-6 shadow-lg mb-8"
-            >
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold text-holographic-white">
-                  Write a Review
-                </h3>
-                <button
-                  onClick={() => setShowReviewForm(false)}
-                  className="text-holographic-white/70 hover:text-holographic-white transition-colors"
-                  disabled={isSubmitting}
-                >
-                  <i className="fas fa-times text-lg"></i>
-                </button>
-              </div>
-              <ReviewForm 
-                eventId={eventId}
-                user={currentUser}
-                existingReview={userReview}
-                onSuccess={handleReviewSubmit}
-                onCancel={() => setShowReviewForm(false)}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-        
-        {!isAuthenticated && (
-          <div className="bg-space-black/50 backdrop-blur-sm border border-deep-purple/20 rounded-xl p-6 text-center">
-            <p className="text-holographic-white/80 mb-4">
-              Sign in to share your experience with this event
-            </p>
-            <Button
-              onClick={() => navigate('/login', { state: { from: window.location.pathname } })}
-              className="bg-gradient-to-r from-tech-blue to-deep-purple hover:opacity-90 text-white"
-            >
-              Sign In to Review
-            </Button>
-          </div>
-        )}
-        
+      <div className="max-w-4xl mx-auto">
         <div className="mt-8">
-          <h3 className="text-xl font-semibold text-holographic-white mb-6">
-            Customer Reviews {reviews.length > 0 && `(${reviews.length})`}
-          </h3>
-          
-          {reviews.length === 0 ? (
-            <div className="text-center py-12 bg-space-black/30 rounded-xl">
-              <i className="fas fa-comment-alt text-4xl text-holographic-white/30 mb-4"></i>
-              <p className="text-holographic-white/60">
-                No reviews yet. Be the first to share your experience!
-              </p>
-            </div>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold">Reviews</h2>
+            {isAuthenticated && !userReview && !showReviewForm && (
+              <Button 
+                onClick={() => setShowReviewForm(true)}
+                disabled={isLoading}
+                className="flex items-center"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'Write a Review'
+                )}
+              </Button>
+            )}
+          </div>
+
+          <AnimatePresence>
+            {showReviewForm && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <ReviewForm
+                  eventId={eventId}
+                  onSuccess={(review) => {
+                    setUserReview(review);
+                    setShowReviewForm(false);
+                    fetchReviews();
+                    fetchReviewStats();
+                    notifyNewReview(review);
+                    toast.success('Your review has been submitted!');
+                  }}
+                  onCancel={() => setShowReviewForm(false)}
+                  initialData={userReview}
+                  isSubmitting={isSubmitting}
+                  onSubmitStart={() => setIsSubmitting(true)}
+                  onSubmitEnd={() => setIsSubmitting(false)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <ReviewSummary 
+            averageRating={reviewStats.averageRating}
+            totalReviews={reviewStats.totalReviews}
+            ratingCounts={reviewStats.ratingCounts}
+            message={reviewStats.message}
+            className="mb-8"
+          />
+
+          {reviews.length > 0 ? (
+            <ReviewList 
+              reviews={reviews} 
+              currentUserId={currentUser?._id}
+              onDelete={fetchReviews}
+            />
           ) : (
-            <div className="space-y-6">
-              {reviews.map((review) => (
-                <div 
-                  key={review._id} 
-                  className="bg-space-black/50 backdrop-blur-sm border border-deep-purple/20 rounded-xl p-6"
-                >
-                  <div className="flex items-center mb-4">
-                    <div className="h-10 w-10 rounded-full bg-deep-purple/20 flex items-center justify-center text-holographic-white font-semibold mr-3">
-                      {review.user?.name?.charAt(0) || 'U'}
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-holographic-white">
-                        {review.user?.name || 'Anonymous User'}
-                      </h4>
-                      <div className="flex items-center">
-                        {[...Array(5)].map((_, i) => (
-                          <i 
-                            key={i}
-                            className={`fas fa-star ${i < review.rating ? 'text-yellow-400' : 'text-holographic-white/30'} text-sm`}
-                          ></i>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-holographic-white/80 mt-2">
-                    {review.review}
-                  </p>
-                  {review.createdAt && (
-                    <p className="text-xs text-holographic-white/40 mt-3">
-                      {new Date(review.createdAt).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
-                    </p>
-                  )}
-                </div>
-              ))}
+            <div className="text-center py-8 text-gray-500">
+              No reviews yet. Be the first to leave a review!
             </div>
           )}
         </div>

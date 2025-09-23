@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Ticket, Clock, Calendar, MapPin, ExternalLink, Loader2, Check, X } from 'lucide-react';
 import { useWeb3 } from '../../contexts/blockchain/Web3Context';
+// Using ethers v5
 import { ethers } from 'ethers';
+const formatEther = (value) => ethers.utils.formatEther(value);
 
 const BlockchainTickets = () => {
   const { 
@@ -22,7 +24,7 @@ const BlockchainTickets = () => {
   // Format price from wei to ETH
   const formatPrice = (priceInWei) => {
     if (!priceInWei) return 'Free';
-    const priceInEth = ethers.utils.formatEther(priceInWei);
+    const priceInEth = formatEther(priceInWei);
     return `${parseFloat(priceInEth).toFixed(4)} ETH`;
   };
   

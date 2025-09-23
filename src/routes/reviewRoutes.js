@@ -6,7 +6,7 @@ const router = express.Router({ mergeParams: true });
 
 // Public routes (no authentication required)
 router.get('/event/:eventId', reviewController.getEventReviews);
-router.get('/event/:eventId/stats', reviewController.getReviewStats);
+router.get('/event/:eventId/stats', reviewController.getEventReviewStats);
 
 // Protect all routes after this middleware
 router.use(authController.protect);

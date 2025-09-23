@@ -6,7 +6,6 @@ const eventSchema = new mongoose.Schema(
     contractEventId: {
       type: Number,
       required: true,
-      index: true,
     },
     organizer: {
       type: mongoose.Schema.Types.ObjectId,
@@ -263,6 +262,10 @@ eventSchema.post(/^findOne/, async function (doc) {
     }
   }
 });
+
+// Create indexes
+eventSchema.index({ contractEventId: 1 });
+eventSchema.index({ 'venue.coordinates': '2dsphere' });
 
 const Event = mongoose.model('Event', eventSchema);
 

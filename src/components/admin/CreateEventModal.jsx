@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { X, Calendar, MapPin, Tag, Ticket, Info } from 'lucide-react';
 import { useWeb3 } from '../../contexts/blockchain/Web3Context';
+import { ethers } from 'ethers';
 import { toast } from 'react-toastify';
+
+// For ethers v6, parseEther is directly available from ethers
+const { parseEther } = ethers;
 
 const CreateEventModal = ({ isOpen, onClose, onEventCreated }) => {
   const { createEvent, isConnected } = useWeb3();
@@ -44,7 +48,7 @@ const CreateEventModal = ({ isOpen, onClose, onEventCreated }) => {
       const unixTimestamp = Math.floor(eventDate.getTime() / 1000);
       
       // Convert price to wei
-      const priceInWei = ethers.utils.parseEther(formData.price);
+      const priceInWei = parseEther(formData.price);
       
       // Call the smart contract
       const tx = await createEvent(

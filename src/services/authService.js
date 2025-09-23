@@ -1,7 +1,7 @@
 import http from './httpService';
 import { API_BASE_URL } from '../config';
 
-const apiEndpoint = '/api/v1/auth';
+const apiEndpoint = '/auth';
 
 // Get current user from localStorage
 export function getCurrentUser() {
@@ -15,18 +15,46 @@ export function getCurrentUser() {
 
 // Login user
 export async function login(email, password) {
-  const { data } = await http.post(`${apiEndpoint}/login`, { email, password });
-  if (data.token) {
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
+  try {
+    const { data } = await http.post(`${apiEndpoint}/login`, { email, password });
+    
+    if (data.token) {
+      // Store token in multiple locations for redundancy
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('auth_token', data.token);
+      document.cookie = `token=${data.token}; path=/; max-age=86400`; // 24 hours
+      
+      // Store user data
+      if (data.user) {
+        localStorage.setItem('user', JSON.stringify(data.user));
+      }
+      
+      console.log('Login successful, token stored');
+    } else {
+      console.warn('Login successful but no token received');
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Login failed:', error);
+    // Clear any partial auth data on error
+    logout();
+    throw error;
   }
-  return data;
 }
 
 // Logout user
 export function logout() {
+  // Clear all auth tokens from localStorage
   localStorage.removeItem('token');
+  localStorage.removeItem('auth_token');
   localStorage.removeItem('user');
+  
+  // Clear auth cookies
+  document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  document.cookie = 'jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  
+  console.log('User logged out and all auth data cleared');
 }
 
 // Register new user

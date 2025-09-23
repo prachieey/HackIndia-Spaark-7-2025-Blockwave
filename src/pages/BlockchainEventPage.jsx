@@ -3,7 +3,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Calendar, MapPin, Users, Clock, Ticket, ExternalLink, User, Loader2 } from 'lucide-react';
 import { useWeb3 } from '../contexts/blockchain/Web3Context';
+// Using ethers v5
 import { ethers } from 'ethers';
+const formatEther = (value) => ethers.utils.formatEther(value);
 import { toast } from 'react-toastify';
 
 const BlockchainEventPage = () => {
@@ -97,7 +99,7 @@ const BlockchainEventPage = () => {
       setBuyingTicket(true);
       
       // Calculate total price
-      const totalPrice = ethers.BigNumber.from(event.price).mul(ticketCount);
+      const totalPrice = BigInt(event.price) * BigInt(ticketCount);
       
       // Call the smart contract to buy tickets
       const tx = await buyTicket(id, ticketCount, totalPrice);
@@ -328,7 +330,7 @@ const BlockchainEventPage = () => {
                   <div className="border-t border-gray-700 my-2"></div>
                   <div className="flex justify-between text-holographic-white font-semibold text-lg">
                     <span>Total</span>
-                    <span>{formatPrice(ethers.BigNumber.from(event.price).mul(ticketCount))}</span>
+                    <span>{formatPrice(BigInt(event.price) * BigInt(ticketCount))}</span>
                   </div>
                 </div>
                 

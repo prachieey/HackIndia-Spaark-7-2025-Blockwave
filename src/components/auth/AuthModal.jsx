@@ -7,7 +7,8 @@ const AuthModal = ({ isOpen, onClose, authType, setAuthType }) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: ''
+    password: '',
+    passwordConfirm: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -30,17 +31,30 @@ const AuthModal = ({ isOpen, onClose, authType, setAuthType }) => {
 
     try {
       if (authType === 'signin') {
-        const result = await login(formData.email, formData.password);
-        if (result.success) {
+        const result = await login({
+          email: formData.email,
+          password: formData.password
+        });
+        if (result && result.success) {
           setSuccess('Signed in successfully!');
           setTimeout(() => {
             onClose();
           }, 1500);
         } else {
-          setError(result.error || 'Failed to sign in');
+          setError(result?.error || 'Failed to sign in');
         }
       } else {
-        const result = await signup(formData.name, formData.email, formData.password);
+        // Ensure all required fields are provided for signup
+        if (!formData.name || !formData.email || !formData.password) {
+          throw new Error('Please fill in all required fields');
+        }
+        
+        const result = await signup({
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+          passwordConfirm: formData.passwordConfirm
+        });
         if (result.success) {
           setSuccess('Account created successfully!');
           setTimeout(() => {
@@ -153,6 +167,24 @@ const AuthModal = ({ isOpen, onClose, authType, setAuthType }) => {
                   minLength={6}
                 />
               </div>
+
+              {authType === 'signup' && (
+                <div>
+                  <label htmlFor="passwordConfirm" className="block text-sm font-medium text-holographic-white mb-1">
+                    Confirm Password
+                  </label>
+                  <input
+                    type="password"
+                    id="passwordConfirm"
+                    name="passwordConfirm"
+                    value={formData.passwordConfirm}
+                    onChange={handleChange}
+                    required={authType === 'signup'}
+                    className="input w-full"
+                    placeholder=""
+                  />
+                </div>
+              )}
 
               <button
                 type="submit"

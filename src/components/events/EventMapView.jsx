@@ -26,35 +26,89 @@ const createMarkerIcon = () => {
   });
 };
 
+// Function to get coordinates from event location
+const getEventCoordinates = (event) => {
+  // If location is a string (city name), we'll need to geocode it
+  if (typeof event.location === 'string') {
+    // Default to New Delhi coordinates as fallback
+    return [28.6139, 77.2090];
+  }
+  
+  // If location has coordinates array
+  if (event.location?.coordinates) {
+    return [event.location.coordinates[1], event.location.coordinates[0]];
+  }
+  
+  // If location has lat/lng properties
+  if (event.location?.lat && event.location?.lng) {
+    return [event.location.lat, event.location.lng];
+  }
+  
+  // Default to New Delhi if no location data
+  return [28.6139, 77.2090];
+};
+
+// Format event date for display
+const formatEventDate = (dateString) => {
+  if (!dateString) return 'Date not specified';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return dateString;
+  }
+};
+
 // Component to handle map events and markers
 const MapContent = ({ events, selectedEvent, onEventSelect, onMapClick }) => {
   const map = useMap();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const markersRef = useRef({});
   const popupRef = useRef();
+  const [geocodedEvents, setGeocodedEvents] = useState([]);
+
+  // Process events to ensure they have valid coordinates
+  useEffect(() => {
+    const processedEvents = events.map(event => ({
+      ...event,
+      coordinates: getEventCoordinates(event),
+      // Ensure we have a valid location string
+      locationString: typeof event.location === 'string' 
+        ? event.location 
+        : event.venue?.name || event.location?.name || 'Location not specified'
+    }));
+    setGeocodedEvents(processedEvents);
+  }, [events]);
 
   // Fit map to markers bounds when events change
   useEffect(() => {
-    if (events.length > 0) {
+    if (geocodedEvents.length > 0) {
       const bounds = L.latLngBounds(
-        events
-          .filter(event => event.location?.coordinates)
-          .map(event => [
-            event.location.coordinates[1], // lat
-            event.location.coordinates[0]  // lng
-          ])
+        geocodedEvents.map(event => event.coordinates)
       );
       
       if (!bounds.isValid()) return;
       
       // Add padding to the bounds
       map.fitBounds(bounds.pad(0.1));
+    } else {
+      // Default to India view if no events
+      map.setView([20.5937, 78.9629], 5);
     }
-  }, [events, map]);
+  }, [geocodedEvents, map]);
 
   // Handle marker click
   const handleMarkerClick = useCallback((e, eventData) => {
-    onEventSelect(eventData);
+    if (onEventSelect) {
+      onEventSelect(eventData);
+    }
     
     // Small delay to ensure popup is open before scrolling
     setTimeout(() => {
@@ -66,7 +120,16 @@ const MapContent = ({ events, selectedEvent, onEventSelect, onMapClick }) => {
         });
       }
     }, 100);
-  }, [onEventSelect]);
+    
+    // Center the map on the marker
+    const [lat, lng] = eventData.coordinates || [];
+    if (lat && lng) {
+      map.flyTo([lat, lng], 15, {
+        duration: 1,
+        easeLinearity: 0.25,
+      });
+    }
+  }, [onEventSelect, map]);
 
   // Toggle fullscreen mode
   const toggleFullscreen = useCallback(() => {
@@ -111,19 +174,14 @@ const MapContent = ({ events, selectedEvent, onEventSelect, onMapClick }) => {
 
   return (
     <>
-      {events.map((event) => {
-        if (!event.location?.coordinates) return null;
-        
-        const position = [
-          event.location.coordinates[1], // latitude
-          event.location.coordinates[0], // longitude
-        ];
-        
-        const isSelected = selectedEvent?._id === event._id;
+      {geocodedEvents.map((event) => {
+        const position = event.coordinates;
+        const isSelected = selectedEvent?._id === event._id || selectedEvent?.id === event.id;
+        const eventImage = event.bannerImage || event.image || 'https://via.placeholder.com/300x150?text=Event+Image';
         
         return (
           <Marker
-            key={event._id}
+            key={event.id || event._id}
             position={position}
             icon={createMarkerIcon()}
             eventHandlers={{
@@ -131,37 +189,77 @@ const MapContent = ({ events, selectedEvent, onEventSelect, onMapClick }) => {
             }}
             ref={(ref) => {
               if (ref) {
-                markersRef.current[event._id] = ref;
-              } else {
-                delete markersRef.current[event._id];
+                const eventId = event.id || event._id;
+                markersRef.current[eventId] = ref;
               }
             }}
           >
             <Popup
               ref={isSelected ? popupRef : null}
               className="event-popup"
-              closeButton={false}
+              closeButton={true}
               autoClose={false}
-              closeOnEscapeKey={false}
+              closeOnEscapeKey={true}
               closeOnClick={false}
+              maxWidth={300}
+              minWidth={250}
             >
-              <div className="w-48">
-                <h3 className="font-medium text-gray-900 text-sm truncate">{event.name}</h3>
-                <p className="text-xs text-gray-500 mt-1">
-                  {event.date && new Date(event.date).toLocaleDateString()}
-                </p>
-                <button
-                  onClick={() => onEventSelect(event)}
-                  className="mt-2 w-full text-xs bg-blue-600 hover:bg-blue-700 text-white py-1 px-2 rounded"
-                >
-                  View Details
-                </button>
+              <div className="w-full max-w-[280px] bg-white rounded-lg overflow-hidden shadow-lg">
+                {/* Event Image */}
+                <div className="h-32 bg-gray-100 overflow-hidden">
+                  <img 
+                    src={eventImage} 
+                    alt={event.title || 'Event'} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'https://via.placeholder.com/300x150?text=Event+Image';
+                    }}
+                  />
+                </div>
+                
+                {/* Event Details */}
+                <div className="p-3">
+                  <h3 className="font-semibold text-gray-900 text-base mb-1 line-clamp-2">
+                    {event.title || event.name || 'Untitled Event'}
+                  </h3>
+                  
+                  {event.date && (
+                    <div className="flex items-center text-sm text-gray-600 mb-1">
+                      <CalendarIcon className="h-4 w-4 mr-1.5 text-gray-500" />
+                      <span>{formatEventDate(event.date)}</span>
+                    </div>
+                  )}
+                  
+                  {event.locationString && (
+                    <div className="flex items-start text-sm text-gray-600 mb-2">
+                      <MapPin className="h-4 w-4 mr-1.5 mt-0.5 flex-shrink-0 text-gray-500" />
+                      <span className="line-clamp-2">{event.locationString}</span>
+                    </div>
+                  )}
+                  
+                  {event.price > 0 ? (
+                    <div className="text-sm font-medium text-green-600 mb-2">
+                      ₹{parseFloat(event.price).toFixed(2)}
+                    </div>
+                  ) : (
+                    <div className="text-sm font-medium text-green-600 mb-2">Free</div>
+                  )}
+                  
+                  <button
+                    onClick={() => onEventSelect && onEventSelect(event)}
+                    className="w-full mt-1 bg-blue-600 hover:bg-blue-700 text-white py-1.5 px-3 rounded-md text-sm font-medium transition-colors"
+                  >
+                    View Details
+                  </button>
+                </div>
               </div>
             </Popup>
           </Marker>
         );
       })}
       
+      {/* Fullscreen Toggle Button */}
       <div className="leaflet-top leaflet-right">
         <div className="leaflet-control">
           <button

@@ -1,22 +1,29 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Sliders, X, Map, List, CheckCircle } from 'lucide-react';
-import { parseISO, isWithinInterval } from 'date-fns';
+import { MapPin, Sliders, X, Map, List, CheckCircle, Loader2, AlertCircle, Calendar as CalendarIcon } from 'lucide-react';
+import { formatEventDate } from '../utils/dateUtils';
+import { parseISO, isWithinInterval, format, addHours } from 'date-fns';
 import EventFilters from '../components/events/EventFilters';
 import EventMapView from '../components/events/EventMapView';
 import EventCard from '../components/events/EventCard';
 import { useEvents } from '../contexts/EventsContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useWeb3 } from '../contexts/blockchain/Web3Context';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import { Button } from '../components/ui/button';
 
 const ExplorePage = () => {
-  const { events, loading, refreshEvents } = useEvents();
-  const { currentUser } = useAuth();
+  const { events, loading, error, fetchEvents } = useEvents();
+  const { user } = useAuth();
+  const { isConnected } = useWeb3();
   const navigate = useNavigate();
   const location = useLocation();
   
-  // State for success message
+  // State for success message and error handling
   const [showSuccess, setShowSuccess] = useState(false);
+  const [localError, setLocalError] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Show success message if redirected from event creation
   useEffect(() => {
@@ -31,6 +38,26 @@ const ExplorePage = () => {
       return () => clearTimeout(timer);
     }
   }, [location.state, navigate]);
+  
+  // Handle refresh events
+  const handleRefresh = useCallback(async () => {
+    try {
+      setIsRefreshing(true);
+      setLocalError(null);
+      await fetchEvents();
+    } catch (err) {
+      console.error('Error refreshing events:', err);
+      setLocalError('Failed to refresh events. Please try again.');
+      toast.error('Failed to refresh events');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [fetchEvents]);
+  
+  // Initial load and refresh when component mounts
+  useEffect(() => {
+    handleRefresh();
+  }, []);
   
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,76 +76,123 @@ const ExplorePage = () => {
   const [page, setPage] = useState(1);
   const itemsPerPage = 12;
   
+  // Available categories - should match your backend
+  const categories = [
+    'All',
+    'music',
+    'sports',
+    'conference',
+    'art',
+    'charity',
+    'other'
+  ];
+  
   // Apply filters and sorting to events
   const filteredEvents = useMemo(() => {
     return events
       .filter(event => {
+        if (!event) return false;
+        
         // Search term filter - search in name, description, location, and organizer
         const searchLower = searchTerm.toLowerCase();
-        const matchesSearch = !searchTerm || 
-          event.name.toLowerCase().includes(searchLower) ||
-          event.description?.toLowerCase().includes(searchLower) ||
-          event.location?.name?.toLowerCase().includes(searchLower) ||
-          event.organizer?.name?.toLowerCase().includes(searchLower);
+        const eventName = event.title?.toLowerCase() || event.name?.toLowerCase() || '';
+        const eventDescription = event.description?.toLowerCase() || '';
+        const eventLocation = event.venue?.name?.toLowerCase() || event.location?.toLowerCase() || '';
         
-        // Category filter - support multiple categories
+        const matchesSearch = searchTerm === '' || 
+          eventName.includes(searchLower) ||
+          eventDescription.includes(searchLower) ||
+          eventLocation.includes(searchLower);
+        
+        // Filter by category
         const matchesCategory = selectedCategory === 'All' || 
-          (Array.isArray(event.categories) 
-            ? event.categories.includes(selectedCategory)
-            : event.category === selectedCategory);
+          (event.category && event.category.toLowerCase() === selectedCategory.toLowerCase());
         
-        // Price range filter - handle both free and paid events
-        const eventPrice = event.ticketPrice || 0;
-        const matchesPrice = !selectedPriceRange || (
-          eventPrice >= (selectedPriceRange.min || 0) && 
-          eventPrice <= (selectedPriceRange.max || Infinity)
-        );
+        // Filter by date range
+        const eventDate = event.startDate ? new Date(event.startDate) : null;
+        let matchesDate = true;
         
-        // Date range filter - handle both single day and multi-day events
-        const eventDate = event.startDate ? parseISO(event.startDate) : null;
-        const matchesDateRange = !dateRange[0]?.startDate || !dateRange[0]?.endDate || !eventDate ||
-          isWithinInterval(eventDate, {
-            start: dateRange[0].startDate,
-            end: dateRange[0].endDate
-          });
+        if (dateRange[0].startDate && dateRange[0].endDate && eventDate) {
+          try {
+            matchesDate = isWithinInterval(eventDate, {
+              start: new Date(dateRange[0].startDate),
+              end: new Date(dateRange[0].endDate)
+            });
+          } catch (error) {
+            console.error('Error checking date range:', error);
+          }
+        }
         
-        return matchesSearch && matchesCategory && matchesPrice && matchesDateRange;
+        // Filter by price range
+        let matchesPrice = true;
+        if (selectedPriceRange && event.ticketTypes?.length > 0) {
+          const [min, max] = selectedPriceRange.split('-').map(Number);
+          const minPrice = Math.min(...event.ticketTypes.map(t => t.price));
+          if (max === Infinity) {
+            matchesPrice = minPrice >= min;
+          } else {
+            matchesPrice = minPrice >= min && minPrice <= max;
+          }
+        }
+        
+        return matchesSearch && matchesCategory && matchesDate && matchesPrice;
       })
       .sort((a, b) => {
-        // Apply sorting with additional fallbacks
-        const aDate = a.startDate ? new Date(a.startDate) : new Date(0);
-        const bDate = b.startDate ? new Date(b.startDate) : new Date(0);
-        const aPrice = a.ticketPrice || 0;
-        const bPrice = b.ticketPrice || 0;
-        const aPopularity = a.attendees?.length || 0;
-        const bPopularity = b.attendees?.length || 0;
+        // Handle cases where dates might be invalid
+        const dateA = a.startDate ? new Date(a.startDate) : new Date(0);
+        const dateB = b.startDate ? new Date(b.startDate) : new Date(0);
         
-        switch (sortBy) {
-          case 'date-asc':
-            return aDate - bDate;
-          case 'date-desc':
-            return bDate - aDate;
-          case 'price-asc':
-            return aPrice - bPrice;
-          case 'price-desc':
-            return bPrice - aPrice;
-          case 'popularity':
-            return bPopularity - aPopularity;
-          default:
-            return 0;
+        // Sort by date
+        if (sortBy === 'date-asc') {
+          return dateA - dateB;
+        } else if (sortBy === 'date-desc') {
+          return dateB - dateA;
+        } else if (sortBy === 'price-asc') {
+          return (a.price || 0) - (b.price || 0);
+        } else if (sortBy === 'price-desc') {
+          return (b.price || 0) - (a.price || 0);
         }
+        return 0;
       });
-  }, [events, searchTerm, selectedCategory, selectedPriceRange, dateRange, sortBy]);
-  
-  // Paginated events
+  }, [events, searchTerm, selectedCategory, dateRange, selectedPriceRange, sortBy]);
+
+  // Pagination
   const paginatedEvents = useMemo(() => {
-    const start = (page - 1) * itemsPerPage;
-    return filteredEvents.slice(0, start + itemsPerPage);
-  }, [filteredEvents, page]);
+    const startIndex = (page - 1) * itemsPerPage;
+    return filteredEvents.slice(0, startIndex + itemsPerPage); // Load all items up to current page
+  }, [filteredEvents, page, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredEvents.length / itemsPerPage);
+  const hasMore = page < totalPages;
+
+  const loadMore = () => {
+    if (hasMore && !loading) {
+      setPage(prev => prev + 1);
+    }
+  };
   
-  // Check if there are more events to load
-  const hasMore = paginatedEvents.length < filteredEvents.length;
+  // Handle event click
+  const handleEventClick = (event) => {
+    setSelectedEvent(event);
+    if (showMap) {
+      // In map view, clicking a card should center the map on that event
+      // This would be implemented in the EventMapView component
+    } else {
+      // In list view, navigate to the event details page
+      navigate(`/events/${event._id || event.id}`);
+    }
+  };
   
+  // Handle reset filters
+  const handleResetFilters = () => {
+    setSearchTerm('');
+    setSelectedCategory('All');
+    setSelectedPriceRange(null);
+    setDateRange([{ startDate: null, endDate: null, key: 'selection' }]);
+    setSortBy('date-asc');
+    setPage(1);
+  };
+
   // Reset all filters
   const resetFilters = useCallback(() => {
     setSearchTerm('');
@@ -127,268 +201,280 @@ const ExplorePage = () => {
     setDateRange([{ startDate: null, endDate: null, key: 'selection' }]);
     setSortBy('date-asc');
   }, []);
-  
-  // Handle event selection from map or list
-  const handleEventSelect = useCallback((event) => {
-    setSelectedEvent(event);
-    
-    // If on mobile and map is open, close it when an event is selected
-    if (window.innerWidth < 768 && showMap) {
-      setShowMap(false);
-    }
-    
-    // Scroll to the selected event card
-    const element = document.getElementById(`event-${event.id || event._id}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      
-      // Add visual feedback for the selected event
-      element.classList.add('ring-2', 'ring-blue-500', 'scale-[1.02]');
-      setTimeout(() => {
-        element.classList.remove('ring-2', 'ring-blue-500', 'scale-[1.02]');
-      }, 2000);
-    }
-  }, [showMap]);
-  
-  // Handle loading more events
-  const loadMoreEvents = useCallback(() => {
-    setIsLoadingMore(true);
-    setPage(prev => prev + 1);
-    // Simulate network delay
-    setTimeout(() => setIsLoadingMore(false), 500);
-  }, []);
-  
-  // Reset pagination when filters change
-  const handleFilterChange = useCallback((filterType, value) => {
-    setPage(1); // Reset to first page when filters change
-    
-    switch (filterType) {
-      case 'search':
-        setSearchTerm(value);
-        break;
-      case 'category':
-        setSelectedCategory(value);
-        break;
-      case 'price':
-        setSelectedPriceRange(value);
-        break;
-      case 'date':
-        setDateRange(value);
-        break;
-      case 'sort':
-        setSortBy(value);
-        break;
-      default:
-        break;
-    }
-  }, []);
-  
-  // Toggle filters panel on mobile
-  const toggleFilters = useCallback(() => {
-    setFiltersExpanded(prev => !prev);
-  }, []);
-  
-  // Toggle map view
-  const toggleMapView = useCallback(() => {
-    setShowMap(prev => !prev);
-  }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 pb-16">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Success Message */}
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white shadow">
+        <div className="max-w-7xl mx-auto px-4 py-4 sm:py-6 sm:px-6 lg:px-8">
+          {/* Title and Event Count */}
+          <div className="mb-4">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Explore Events</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              {filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'} found
+              {searchTerm ? ` for "${searchTerm}"` : ''}
+            </p>
+          </div>
+          
+          {/* View Toggle and Filter Buttons */}
+          <div className="flex flex-col space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setShowMap(!showMap)}
+                className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+              >
+                {showMap ? (
+                  <>
+                    <List className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span className="whitespace-nowrap">List View</span>
+                  </>
+                ) : (
+                  <>
+                    <Map className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span className="whitespace-nowrap">Map View</span>
+                  </>
+                )}
+              </button>
+              
+              <button
+                onClick={() => setFiltersExpanded(!filtersExpanded)}
+                className={`flex-1 sm:flex-none flex items-center justify-center px-4 py-2 border rounded-md shadow-sm text-sm font-medium transition-colors ${
+                  filtersExpanded 
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700' 
+                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <Sliders className="h-4 w-4 mr-2 flex-shrink-0" />
+                <span className="whitespace-nowrap">
+                  {filtersExpanded ? 'Hide Filters' : 'Filters'}
+                </span>
+                {(searchTerm || selectedCategory !== 'All' || selectedPriceRange || dateRange[0].startDate) && (
+                  <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-800 rounded-full">
+                    Active
+                  </span>
+                )}
+              </button>
+              
+              {(searchTerm || selectedCategory !== 'All' || selectedPriceRange || dateRange[0].startDate) && (
+                <button
+                  onClick={handleResetFilters}
+                  className="flex-1 sm:flex-none flex items-center justify-center px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors border border-gray-200 rounded-md"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  <span className="whitespace-nowrap">Clear filters</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main content */}
+      <main className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+        {/* Filters */}
         <AnimatePresence>
-          {showSuccess && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="mb-6 p-4 bg-green-900/30 border border-green-800 rounded-lg text-green-400 flex items-center"
+          {filtersExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+              animate={{ opacity: 1, height: 'auto', marginBottom: '1.5rem' }}
+              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="overflow-hidden"
             >
-              <CheckCircle className="h-5 w-5 mr-2 flex-shrink-0" />
-              <span>Your event has been created and listed successfully!</span>
+              <div className="bg-white p-4 sm:p-6 rounded-lg shadow-sm border border-gray-200">
+                <EventFilters
+                  searchTerm={searchTerm}
+                  setSearchTerm={setSearchTerm}
+                  selectedCategory={selectedCategory}
+                  setSelectedCategory={setSelectedCategory}
+                  selectedPriceRange={selectedPriceRange}
+                  setSelectedPriceRange={setSelectedPriceRange}
+                  dateRange={dateRange}
+                  setDateRange={setDateRange}
+                  sortBy={sortBy}
+                  setSortBy={setSortBy}
+                  categories={categories}
+                  onReset={handleResetFilters}
+                />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Mobile Filters Toggle */}
-        <div className="md:hidden flex items-center justify-between mb-6">
-          <button
-            onClick={toggleFilters}
-            className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            {filtersExpanded ? <X size={16} /> : <Sliders size={16} />}
-            <span>{filtersExpanded ? 'Hide Filters' : 'Filters'}</span>
-          </button>
-          
-          <button
-            onClick={toggleMapView}
-            className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            {showMap ? <List size={16} /> : <Map size={16} />}
-            <span>{showMap ? 'List View' : 'Map View'}</span>
-          </button>
-        </div>
-        
-        <div className="flex flex-col md:flex-row gap-6">
-          {/* Filters Sidebar - Desktop */}
-          <div className={`${filtersExpanded ? 'block' : 'hidden'} md:block md:w-64 lg:w-80 flex-shrink-0`}>
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 sticky top-24">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
-                <button 
-                  onClick={resetFilters}
-                  className="text-sm text-blue-600 hover:text-blue-700"
-                >
-                  Reset all
-                </button>
-              </div>
-              
-              <EventFilters
-                searchTerm={searchTerm}
-                selectedCategory={selectedCategory}
-                selectedPriceRange={selectedPriceRange}
-                dateRange={dateRange}
-                sortBy={sortBy}
-                onSearchChange={(value) => handleFilterChange('search', value)}
-                onCategoryChange={(value) => handleFilterChange('category', value)}
-                onPriceRangeChange={(value) => handleFilterChange('price', value)}
-                onDateRangeChange={(value) => handleFilterChange('date', value)}
-                onSortChange={(value) => handleFilterChange('sort', value)}
-                categories={[...new Set(events.flatMap(e => e.categories || []).filter(Boolean))]}
+        {/* Events grid */}
+        <div className="mt-6 relative">
+          {/* Blur overlay that appears when filters are expanded */}
+          <AnimatePresence>
+            {filtersExpanded && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.7 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="absolute inset-0 bg-white z-10 pointer-events-none"
               />
-              
-              <div className="mt-6 pt-4 border-t border-gray-100">
-                <p className="text-sm text-gray-500 mb-2">
-                  Showing {Math.min(paginatedEvents.length, filteredEvents.length)} of {filteredEvents.length} events
-                </p>
-                {currentUser?.isAdmin && (
-                  <button
-                    onClick={() => navigate('/admin/events/new')}
-                    className="w-full mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                  >
-                    Create New Event
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+            )}
+          </AnimatePresence>
           
-          {/* Main Content */}
-          <div className="flex-1">
-            {/* Map View */}
-            {showMap ? (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden" style={{ height: 'calc(100vh - 180px)' }}>
-                <EventMapView 
-                  events={filteredEvents} 
-                  onEventSelect={handleEventSelect}
-                  selectedEvent={selectedEvent}
-                />
-              </div>
-            ) : (
-              /* List View */
-              <>
-                {/* View Toggle - Desktop */}
-                <div className="hidden md:flex items-center justify-between mb-6">
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {searchTerm ? `Search: "${searchTerm}"` : 'All Events'}
-                    {selectedCategory !== 'All' && ` in ${selectedCategory}`}
-                  </h1>
-                  
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={toggleMapView}
-                      className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
+          {showMap ? (
+            <motion.div 
+              className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative"
+              animate={{
+                filter: filtersExpanded ? 'blur(4px)' : 'blur(0px)',
+                transition: { duration: 0.3 }
+              }}
+            >
+              <EventMapView 
+                events={filteredEvents} 
+                selectedEvent={selectedEvent}
+                onEventClick={handleEventClick}
+                className="h-[600px] w-full"
+              />
+              {selectedEvent && (
+                <div className="p-4 border-t border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-900">{selectedEvent.title}</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {formatEventDate(selectedEvent.startDate)}
+                  </p>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {selectedEvent.location}
+                  </p>
+                  <div className="mt-4">
+                    <Button
+                      onClick={() => handleEventClick(selectedEvent)}
+                      className="w-full justify-center"
                     >
-                      <Map size={16} />
-                      <span>Map View</span>
-                    </button>
+                      View Details
+                    </Button>
                   </div>
                 </div>
-                
-                {/* Events Grid */}
-                {loading ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {[...Array(6)].map((_, i) => (
-                      <div key={i} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <div className="animate-pulse">
-                          <div className="h-48 bg-gray-200"></div>
-                          <div className="p-4">
-                            <div className="h-6 bg-gray-200 rounded w-3/4 mb-2"></div>
-                            <div className="h-4 bg-gray-100 rounded w-1/2 mb-4"></div>
-                            <div className="h-3 bg-gray-100 rounded w-full mb-1"></div>
-                            <div className="h-3 bg-gray-100 rounded w-5/6"></div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+              )}
+            </motion.div>
+          ) : (
+            <motion.div 
+              className="relative"
+              animate={{
+                filter: filtersExpanded ? 'blur(4px)' : 'blur(0px)',
+                transition: { duration: 0.3 }
+              }}
+            >
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {filteredEvents.map((event, index) => {
+                  if (!event) return null; // Skip null/undefined events
+                  
+                  // Create a unique key using event._id, event.id, or fallback to index
+                  const uniqueKey = event?._id || event?.id || `event-${index}`;
+                  
+                  // Get the first ticket type's price as the event price if available
+                  const ticketPrice = event.ticketTypes?.length > 0 
+                    ? Math.min(...event.ticketTypes.map(t => t.price))
+                    : 0;
+                  
+                  // Get the event location from venue or location field
+                  const eventLocation = event.venue?.name || event.location || 'Location not specified';
+                  
+                  // Get the event image from bannerImage or use a fallback
+                  const eventImage = event.bannerImage || 
+                                   event.image || 
+                                   'https://via.placeholder.com/400x225';
+                  
+                  // Get the organizer name (handling both object and string cases)
+                  const organizerName = typeof event.organizer === 'object' 
+                    ? event.organizer?.name || 'Organizer'
+                    : event.organizer || 'Organizer';
+                  
+                  return (
+                    <EventCard 
+                      key={uniqueKey}
+                      event={{
+                        ...event,
+                        // Ensure all required fields have fallbacks
+                        id: event._id || uniqueKey,
+                        title: event.title || 'Untitled Event',
+                        description: event.description || 'No description available',
+                        image: eventImage,
+                        date: event.startDate ? formatEventDate(event.startDate) : 'Date not specified',
+                        location: eventLocation,
+                        price: ticketPrice,
+                        category: event.category || 'other',
+                        organizer: organizerName,
+                        // Add any other required fields with fallbacks
+                        startDate: event.startDate,
+                        endDate: event.endDate,
+                        timezone: event.timezone || 'UTC',
+                        status: event.status || 'upcoming',
+                        tags: event.tags || [],
+                        // Ensure we have the original event data for the click handler
+                        _original: event
+                      }}
+                      onClick={() => handleEventClick(event)}
+                    />
+                  );
+                })}
+              
+              </div>
+              
+              {filteredEvents.length === 0 ? (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+                  <h3 className="text-lg font-medium text-gray-900">No events found</h3>
+                  <p className="mt-2 text-sm text-gray-500">
+                    We couldn't find any events matching your criteria. Try adjusting your filters.
+                  </p>
+                  <div className="mt-6">
+                    <Button
+                      onClick={handleResetFilters}
+                      variant="outline"
+                      className="inline-flex items-center"
+                    >
+                      <X className="mr-2 h-4 w-4" />
+                      Clear all filters
+                    </Button>
                   </div>
-                ) : paginatedEvents.length > 0 ? (
-                  <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <AnimatePresence>
-                        {paginatedEvents.map((event) => (
-                          <motion.div
-                            key={event.id || event._id}
-                            id={`event-${event.id || event._id}`}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95 }}
-                            transition={{ duration: 0.2 }}
-                            className="relative"
-                          >
-                            <EventCard 
-                              event={event} 
-                              onClick={handleEventSelect}
-                              isSelected={selectedEvent && (selectedEvent.id === event.id || selectedEvent._id === event._id)}
-                              className="h-full"
-                            />
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                    
-                    {/* Load More Button */}
-                    {hasMore && (
-                      <div className="mt-8 text-center">
-                        <button
-                          onClick={loadMoreEvents}
-                          disabled={isLoadingMore}
-                          className={`px-6 py-2.5 bg-white border border-gray-200 rounded-lg shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                            isLoadingMore ? 'opacity-70 cursor-not-allowed' : ''
-                          }`}
-                        >
-                          {isLoadingMore ? 'Loading...' : 'Load More Events'}
-                        </button>
-                      </div>
+                </div>
+              ) : null}
+              
+              {hasMore && (
+                <div className="mt-10 text-center">
+                  <Button
+                    onClick={loadMore}
+                    disabled={loading || isLoadingMore}
+                    className="inline-flex items-center px-6 py-3 text-base font-medium"
+                  >
+                    {loading || isLoadingMore ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      'Load More Events'
                     )}
-                  </>
-                ) : (
-                  <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-100">
-                    <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                      <MapPin className="h-8 w-8 text-gray-400" />
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-1">No events found</h3>
-                    <p className="text-gray-500 mb-6">
-                      {searchTerm || selectedCategory !== 'All' || selectedPriceRange || dateRange[0]?.startDate
-                        ? 'Try adjusting your filters to find more events.'
-                        : 'There are currently no upcoming events. Check back later!'}
-                    </p>
-                    {(searchTerm || selectedCategory !== 'All' || selectedPriceRange || dateRange[0]?.startDate) && (
-                      <button
-                        onClick={resetFilters}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
-                      >
-                        Clear all filters
-                      </button>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
+                  </Button>
+                  <p className="mt-2 text-sm text-gray-500">
+                    Showing {Math.min(paginatedEvents.length, filteredEvents.length)} of {filteredEvents.length} events
+                  </p>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </div>
+      </main>
+      
+      {/* Footer */}
+      <footer className="bg-white border-t border-gray-200 mt-12">
+        <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <p className="text-sm text-gray-500">
+              &copy; {new Date().getFullYear()} Event Platform. All rights reserved.
+            </p>
+            <div className="mt-4 md:mt-0 flex space-x-6">
+              <a href="/about" className="text-sm text-gray-500 hover:text-gray-700">About</a>
+              <a href="/privacy" className="text-sm text-gray-500 hover:text-gray-700">Privacy</a>
+              <a href="/terms" className="text-sm text-gray-500 hover:text-gray-700">Terms</a>
+              <a href="/contact" className="text-sm text-gray-500 hover:text-gray-700">Contact</a>
+            </div>
           </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
 };

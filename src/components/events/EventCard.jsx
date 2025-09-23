@@ -5,7 +5,9 @@ import { motion } from 'framer-motion';
 import { useWeb3 } from '../../contexts/blockchain/Web3Context';
 import { useAuth } from '../../contexts/AuthContext';
 import { format, parseISO, isPast, isToday, isTomorrow, isThisWeek } from 'date-fns';
-import { formatEther } from 'ethers';
+// Using ethers v5
+import { ethers } from 'ethers';
+const formatEther = (value) => ethers.utils.formatEther(value);
 
 // Default event image
 const DEFAULT_EVENT_IMAGE = 'https://images.unsplash.com/photo-1531058020387-3be344556be6?ixlib=rb-4.0.3&auto=format&fit=crop&w=1470&q=80';
@@ -26,23 +28,56 @@ const EventCard = ({
   const eventData = useMemo(() => {
     // Helper function to safely get location string
     const getLocationString = (location) => {
-      if (!location) return 'Location not specified';
+      if (!location || (typeof location === 'object' && Object.keys(location).length === 0)) {
+        return 'Venue details coming soon';
+      }
       
-      // If it's a string, return it directly
-      if (typeof location === 'string') return location;
+      // If it's a string, return it directly if not empty
+      if (typeof location === 'string' && location.trim() !== '') {
+        return location;
+      }
       
       // If it's an object, try to construct a meaningful string
       if (typeof location === 'object') {
-        if (location.name) return location.name;
-        if (location.address) return location.address;
-        if (location.city) return location.city;
+        const parts = [];
+        if (location.name) parts.push(location.name);
+        if (location.address) parts.push(location.address);
+        if (location.city) parts.push(location.city);
         
-        // If we have coordinates, return a generic location text
-        if (location.coordinates) return 'See event for location';
+        if (parts.length > 0) {
+          return parts.join(', ');
+        }
+        
+        // If we have coordinates but no other info
+        if (location.coordinates) return 'Venue location available';
       }
       
-      return 'Location not specified';
+      return 'Venue details coming soon';
     };
+    
+    // Helper to get a valid date
+    const getValidDate = (date) => {
+      if (!date) return null;
+      const parsedDate = typeof date === 'string' ? parseISO(date) : new Date(date);
+      return isNaN(parsedDate.getTime()) ? null : parsedDate;
+    };
+    
+    const eventDate = getValidDate(event.startDate || event.date);
+    
+    // Calculate price from ticket types if available (all prices should be in INR)
+    const ticketPrices = event.ticketTypes?.length > 0 
+      ? event.ticketTypes.map(t => {
+          // Ensure price is a number and not in wei (starts with 0x)
+          if (t.price && typeof t.price === 'string' && t.price.startsWith('0x')) {
+            const priceInEth = parseFloat(formatEther(t.price));
+            return priceInEth * 200000; // Convert ETH to INR
+          }
+          return parseFloat(t.price) || 0;
+        }).filter(p => p > 0)
+      : [];
+    
+    const minPrice = ticketPrices.length > 0 ? Math.min(...ticketPrices) : 0;
+    const maxPrice = ticketPrices.length > 0 ? Math.max(...ticketPrices) : 0;
     
     return {
       ...event,
@@ -50,73 +85,221 @@ const EventCard = ({
       title: event.name || event.title || 'Untitled Event',
       description: event.description || 'No description available.',
       image: event.image || event.coverImage || DEFAULT_EVENT_IMAGE,
-      date: event.date || event.startDate,
-      location: getLocationString(event.location || event.venue),
-      price: event.price || event.ticketPrice || 0,
+      date: eventDate,
+      location: getLocationString(event.location || event.venue || {}),
+      // Ensure price is in INR
+      price: (() => {
+        // If we have a direct price, use it (assuming it's in INR)
+        if (event.price) {
+          if (typeof event.price === 'string' && event.price.startsWith('0x')) {
+            // Convert from wei to ETH to INR
+            const priceInEth = parseFloat(formatEther(event.price));
+            return priceInEth * 200000; // Convert to INR
+          }
+          return parseFloat(event.price) || 0;
+        }
+        // If no price but we have ticket prices, use the minimum
+        if (ticketPrices.length > 0) return Math.min(...ticketPrices);
+        // Fallback to ticketPrice or 0
+        return parseFloat(event.ticketPrice) || 0;
+      })(),
+      minPrice,
+      maxPrice,
+      hasMultiplePrices: ticketPrices.length > 1,
       category: event.category || 'Other',
       capacity: event.capacity || event.maxAttendees || 0,
       registered: event.attendees?.length || 0,
-      isFree: !event.price && !event.ticketPrice,
-      rating: event.rating || 0
+      isFree: ticketPrices.length > 0 
+        ? ticketPrices.every(price => price === 0) 
+        : (event.price === 0 || event.ticketPrice === 0 || event.isFree === true),
+      rating: event.rating || 0,
+      ticketTypes: event.ticketTypes || []
     };
   }, [event]);
 
   // Format date and time
   const formattedDate = useMemo(() => {
-    if (!eventData.date) return { date: 'Date not specified', time: '', full: 'Date not specified' };
+    // Use startDate if available, otherwise fall back to date
+    const dateValue = eventData.startDate || eventData.date;
+    const endDateValue = eventData.endDate;
     
-    const date = typeof eventData.date === 'string' ? parseISO(eventData.date) : new Date(eventData.date);
-    if (isNaN(date.getTime())) return { date: 'Invalid date', time: '', full: 'Invalid date' };
-    
-    // Relative date (Today, Tomorrow, This Week, or specific date)
-    let relativeDate = '';
-    if (isToday(date)) {
-      relativeDate = 'Today';
-    } else if (isTomorrow(date)) {
-      relativeDate = 'Tomorrow';
-    } else if (isThisWeek(date)) {
-      relativeDate = format(date, 'EEEE'); // Day of week
-    } else {
-      relativeDate = format(date, 'MMM d, yyyy');
+    if (!dateValue) {
+      return { 
+        date: 'Date not specified', 
+        time: 'Time not specified', 
+        full: 'Date and time not specified',
+        hasDate: false,
+        hasTime: false
+      };
     }
     
-    // Time
-    const time = format(date, 'h:mm a');
-    
-    return { 
-      date: relativeDate, 
-      time, 
-      full: format(date, 'EEEE, MMMM d, yyyy • h:mm a') 
-    };
+    try {
+      // Parse the date if it's a string
+      let startDate = dateValue;
+      let endDate = endDateValue;
+      
+      const parseDate = (date) => {
+        if (!date) return null;
+        if (date instanceof Date) return date;
+        try {
+          return parseISO(date);
+        } catch (e) {
+          return new Date(date);
+        }
+      };
+      
+      startDate = parseDate(startDate);
+      endDate = endDate ? parseDate(endDate) : null;
+      
+      // Check if the date is valid
+      if (isNaN(startDate.getTime())) {
+        throw new Error('Invalid start date');
+      }
+      
+      // Check if we have time information
+      const hasTime = eventData.startTime || 
+                     eventData.time ||
+                     (startDate.getHours() !== 0 || startDate.getMinutes() !== 0);
+      
+      // Relative date (Today, Tomorrow, This Week, or specific date)
+      let relativeDate = '';
+      if (isToday(startDate)) {
+        relativeDate = 'Today';
+      } else if (isTomorrow(startDate)) {
+        relativeDate = 'Tomorrow';
+      } else if (isThisWeek(startDate, { weekStartsOn: 1 })) {
+        relativeDate = format(startDate, 'EEEE'); // Day of week
+      } else {
+        relativeDate = format(startDate, 'MMM d, yyyy');
+      }
+      
+      // Format time range if we have both start and end dates
+      let timeString = 'Time not specified';
+      let fullDateString = format(startDate, 'EEEE, MMMM d, yyyy');
+      
+      if (hasTime) {
+        const startTime = format(startDate, 'h:mm a');
+        
+        if (endDate && !isNaN(endDate.getTime())) {
+          const endTime = format(endDate, 'h:mm a');
+          const sameDay = startDate.toDateString() === endDate.toDateString();
+          
+          if (sameDay) {
+            timeString = `${startTime} - ${endTime}`;
+            fullDateString = `${format(startDate, 'EEEE, MMMM d, yyyy')} • ${timeString}`;
+          } else {
+            timeString = `${format(startDate, 'MMM d, h:mm a')} - ${format(endDate, 'MMM d, h:mm a, yyyy')}`;
+            fullDateString = timeString;
+          }
+        } else {
+          timeString = startTime;
+          fullDateString = `${fullDateString} • ${timeString}`;
+        }
+      } else {
+        fullDateString = `${fullDateString} • Time not specified`;
+      }
+      
+      return { 
+        date: relativeDate, 
+        time: timeString,
+        full: fullDateString,
+        hasDate: true,
+        hasTime
+      };
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      console.log('Input date was:', dateValue);
+      console.log('Event data:', {
+        id: eventData.id,
+        title: eventData.title,
+        startDate: eventData.startDate,
+        endDate: eventData.endDate,
+        date: eventData.date
+      });
+      
+      // Try to get a basic date string as fallback
+      let fallbackDate = 'Date not available';
+      let fallbackTime = 'Time not available';
+      
+      if (dateValue) {
+        try {
+          const d = new Date(dateValue);
+          if (!isNaN(d.getTime())) {
+            fallbackDate = d.toLocaleDateString();
+            fallbackTime = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          }
+        } catch (e) {
+          console.error('Fallback date formatting failed:', e);
+        }
+      }
+      
+      return { 
+        date: fallbackDate, 
+        time: fallbackTime, 
+        full: `${fallbackDate} • ${fallbackTime}`,
+        hasDate: fallbackDate !== 'Date not available',
+        hasTime: fallbackTime !== 'Time not available'
+      };
+    }
   }, [eventData.date]);
 
-  // Format price
+  // Format price - all values are in INR
   const formattedPrice = useMemo(() => {
+    // Helper function to ensure we have a valid number
+    const toNumber = (value) => {
+      if (value === undefined || value === null) return 0;
+      const num = typeof value === 'string' ? parseFloat(value) : Number(value);
+      return isNaN(num) ? 0 : num;
+    };
+    
+    // If marked as free, return free
     if (eventData.isFree) return { text: 'Free', value: 0 };
     
     try {
-      // If price is in wei (from blockchain)
-      if (typeof eventData.price === 'string' && eventData.price.startsWith('0x')) {
-        const priceInEth = parseFloat(formatEther(eventData.price));
-        return { 
-          text: `${priceInEth.toFixed(4)} ETH`,
-          value: priceInEth
+      // If there are multiple ticket prices, show a range
+      if (eventData.hasMultiplePrices) {
+        const min = toNumber(eventData.minPrice);
+        const max = toNumber(eventData.maxPrice);
+        
+        // If min and max are the same, just show one price
+        if (min === max) {
+          return {
+            text: `₹${min.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            value: min
+          };
+        }
+        
+        // Otherwise show the range
+        return {
+          text: `₹${min.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} - ₹${max.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          value: min // Use min value for sorting
         };
       }
       
-      // If price is in fiat
-      const price = parseFloat(eventData.price);
-      if (isNaN(price)) return { text: 'Free', value: 0 };
+      // If price is in wei (from blockchain)
+      if (typeof eventData.price === 'string' && eventData.price.startsWith('0x')) {
+        const priceInEth = parseFloat(formatEther(eventData.price));
+        // Convert ETH to INR (assuming 1 ETH = 200,000 INR for this example)
+        const priceInInr = priceInEth * 200000;
+        return { 
+          text: `₹${priceInInr.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          value: priceInInr
+        };
+      }
+      
+      // For regular prices (already in INR)
+      const price = toNumber(eventData.price);
+      if (price <= 0) return { text: 'Free', value: 0 };
       
       return { 
-        text: `$${price.toFixed(2)}`,
+        text: `₹${price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         value: price
       };
     } catch (error) {
       console.error('Error formatting price:', error);
       return { text: 'Free', value: 0 };
     }
-  }, [eventData.price, formatEther]);
+  }, [eventData.price, eventData.minPrice, eventData.maxPrice, eventData.hasMultiplePrices, formatEther]);
 
   // Calculate event status
   const eventStatus = useMemo(() => {
@@ -142,30 +325,142 @@ const EventCard = ({
     // TODO: Implement favorite functionality with backend
   };
 
-  // Share event
+  // Share event with improved error handling and fallback
   const shareEvent = (e) => {
     e.stopPropagation();
+    console.log('Share button clicked - Event ID:', eventData.id);
+
+    // Ensure we have a valid URL
+    const eventUrl = `${window.location.origin}/events/${eventData.id || ''}`;
     const shareData = {
-      title: eventData.title,
-      text: `Check out this event: ${eventData.title}`,
-      url: window.location.origin + `/events/${eventData.id}`,
+      title: eventData.title || 'Check out this event',
+      text: `Check out this event: ${eventData.title || ''}`,
+      url: eventUrl,
     };
-    
+
+    console.log('Sharing data:', shareData);
+
+    // Fallback function for copying to clipboard
+    const fallbackCopy = () => {
+      console.log('Using fallback copy method');
+      const textArea = document.createElement('textarea');
+      textArea.value = eventUrl;
+      textArea.style.position = 'fixed';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+
+      try {
+        const successful = document.execCommand('copy');
+        const msg = successful ? 'Link copied to clipboard!' : 'Failed to copy link';
+        console.log(msg);
+        showToast(msg, successful ? 'success' : 'error');
+      } catch (err) {
+        console.error('Could not copy text: ', err);
+        showToast('Could not copy link. Please try again.', 'error');
+      }
+
+      document.body.removeChild(textArea);
+    };
+
+    // Show toast notification
+    const showToast = (message, type = 'info') => {
+      const toast = document.createElement('div');
+      toast.textContent = message;
+      toast.style.position = 'fixed';
+      toast.style.bottom = '20px';
+      toast.style.left = '50%';
+      toast.style.transform = 'translateX(-50%)';
+      toast.style.backgroundColor = type === 'success' ? '#10B981' : '#EF4444';
+      toast.style.color = 'white';
+      toast.style.padding = '10px 20px';
+      toast.style.borderRadius = '20px';
+      toast.style.zIndex = '1000';
+      toast.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 3000);
+    };
+
+    // Try Web Share API first
     if (navigator.share) {
-      navigator.share(shareData).catch(console.error);
+      console.log('Web Share API is available');
+      navigator.share(shareData)
+        .then(() => console.log('Shared successfully'))
+        .catch((error) => {
+          console.error('Share failed:', error);
+          if (error.name === 'AbortError') {
+            console.log('Share was cancelled');
+          } else {
+            fallbackCopy();
+          }
+        });
     } else {
-      // Fallback for browsers that don't support Web Share API
-      navigator.clipboard.writeText(shareData.url).then(() => {
-        alert('Link copied to clipboard!');
-      }).catch(console.error);
+      console.log('Web Share API not available, using fallback');
+      fallbackCopy();
     }
+  };
+  
+  // Fallback share method using clipboard API
+  const fallbackShare = (shareData) => {
+    // Create a temporary input element
+    const input = document.createElement('input');
+    input.value = shareData.url;
+    document.body.appendChild(input);
+    input.select();
+    
+    try {
+      const successful = document.execCommand('copy');
+      const msg = successful ? 'Link copied to clipboard!' : 'Failed to copy link';
+      // Show a toast notification instead of alert
+      const toast = document.createElement('div');
+      toast.textContent = msg;
+      toast.style.position = 'fixed';
+      toast.style.bottom = '20px';
+      toast.style.left = '50%';
+      toast.style.transform = 'translateX(-50%)';
+      toast.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+      toast.style.color = 'white';
+      toast.style.padding = '10px 20px';
+      toast.style.borderRadius = '20px';
+      toast.style.zIndex = '1000';
+      document.body.appendChild(toast);
+      
+      // Remove the toast after 3 seconds
+      setTimeout(() => {
+        document.body.removeChild(toast);
+      }, 3000);
+    } catch (err) {
+      console.error('Error copying to clipboard:', err);
+      // Last resort - show the URL in an alert
+      alert('Could not copy link. Please copy it manually: ' + shareData.url);
+    }
+    
+    // Clean up
+    document.body.removeChild(input);
   };
 
   // Handle card click
   const handleClick = (e) => {
-    e.preventDefault();
-    onClick(eventData);
-    navigate(`/events/${eventData.id}`);
+    // Don't navigate if clicking on interactive elements
+    if (e.target.tagName === 'BUTTON' || e.target.closest('button, a, [role="button"]')) {
+      return;
+    }
+    
+    // Stop propagation to prevent multiple event triggers
+    e.stopPropagation();
+    
+    // Call the onClick prop if provided (from parent component)
+    if (onClick) {
+      onClick(eventData);
+    } else {
+      // If no onClick prop is provided, navigate to the event details page
+      navigate(`/events/${eventData.id}`);
+    }
   };
 
   return (
@@ -205,21 +500,9 @@ const EventCard = ({
           <Heart className="h-4 w-4" fill={isFavorite ? 'currentColor' : 'none'} />
         </button>
         
-        {/* Category badge */}
-        <div className="absolute bottom-3 left-3">
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-            {eventData.category}
-          </span>
-        </div>
+        {/* Category badge moved to bottom right */}
         
-        {/* Event status badge */}
-        {eventStatus === 'today' && (
-          <div className="absolute bottom-3 right-3">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-              Happening Today
-            </span>
-          </div>
-        )}
+        {/* Moved Happening Today badge to the date section */}
         
         {/* Share button - shown on hover */}
         <motion.button
@@ -235,37 +518,96 @@ const EventCard = ({
       
       {/* Event details */}
       <div className="p-4">
-        {/* Title and date */}
-        <div className="mb-3">
-          <h3 className="font-semibold text-gray-900 line-clamp-2 mb-1 group-hover:text-blue-600 transition-colors">
-            {eventData.title}
-          </h3>
-          
-          <div className="flex items-center text-sm text-gray-500">
-            <Calendar className="h-4 w-4 mr-1.5 flex-shrink-0" />
-            <span>{formattedDate.full}</span>
-          </div>
-        </div>
+        {/* Title */}
+        <h3 className="font-semibold text-gray-900 line-clamp-2 mb-3 group-hover:text-blue-600 transition-colors">
+          {eventData.title}
+        </h3>
         
-        {/* Location */}
-        <div className="flex items-center text-sm text-gray-600 mb-3">
-          <MapPin className="h-4 w-4 mr-1.5 flex-shrink-0 text-gray-400" />
-          <span className="line-clamp-1">{eventData.location}</span>
-        </div>
-        
-        {/* Event stats */}
-        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-          <div className="flex items-center text-sm text-gray-500">
-            <Users className="h-4 w-4 mr-1.5" />
-            <span>{eventData.registered} {eventData.capacity ? `of ${eventData.capacity}` : ''} going</span>
-          </div>
-          
-          {eventData.rating > 0 && (
-            <div className="flex items-center text-sm text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-              <Star className="h-3.5 w-3.5 mr-1 fill-current" />
-              <span>{eventData.rating.toFixed(1)}</span>
+        {/* Date and Time - More prominent */}
+        <div className="bg-blue-50 rounded-lg p-3 mb-3 border border-blue-100">
+          <div className="flex items-start">
+            <div className="bg-blue-100 p-2 rounded-lg mr-3">
+              <Calendar className="h-5 w-5 text-blue-600" />
             </div>
-          )}
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-700">
+                {formattedDate.hasDate && formattedDate.hasTime ? 'Date & Time' : 
+                 formattedDate.hasDate ? 'Date' : 'Time'}
+              </p>
+              <div className="space-y-1">
+                {formattedDate.hasDate && (
+                  <p className="text-sm text-gray-900 font-medium">
+                    {formattedDate.date}
+                    {formattedDate.hasTime && ` • ${formattedDate.time}`}
+                  </p>
+                )}
+                {!formattedDate.hasDate && formattedDate.hasTime && (
+                  <p className="text-sm text-gray-900 font-medium">
+                    {formattedDate.time}
+                  </p>
+                )}
+                {!formattedDate.hasDate && !formattedDate.hasTime && (
+                  <p className="text-sm text-gray-500 italic">
+                    Date and time not specified
+                  </p>
+                )}
+              </div>
+              {eventStatus === 'today' && formattedDate.hasDate && (
+                <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  Happening Today
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Location - More prominent */}
+        <div className="bg-gray-50 rounded-lg p-3 mb-4 border border-gray-100">
+          <div className="flex items-start">
+            <div className="bg-gray-100 p-2 rounded-lg mr-3">
+              <MapPin className="h-5 w-5 text-gray-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-700">Location</p>
+              <p className="text-sm text-gray-900 font-medium">
+                {eventData.location || 'Location not specified'}
+              </p>
+              {eventData.location && eventData.location.includes('India') && (
+                <span className="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                  🇮🇳 India
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Event stats - More compact */}
+        <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center text-sm text-gray-600 bg-gray-50 px-3 py-1.5 rounded-full">
+              <Users className="h-4 w-4 mr-1.5 text-gray-500" />
+              <span className="font-medium">{eventData.registered}</span>
+              {eventData.capacity > 0 && (
+                <span className="text-gray-400 mx-1">/</span>
+              )}
+              {eventData.capacity > 0 && (
+                <span className="text-gray-500">{eventData.capacity}</span>
+              )}
+              <span className="ml-1">going</span>
+            </div>
+            
+            {eventData.rating > 0 && (
+              <div className="flex items-center text-sm text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full">
+                <Star className="h-4 w-4 mr-1.5 fill-current" />
+                <span className="font-medium">{eventData.rating.toFixed(1)}</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Category badge - Moved here */}
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            {eventData.category}
+          </span>
         </div>
       </div>
       

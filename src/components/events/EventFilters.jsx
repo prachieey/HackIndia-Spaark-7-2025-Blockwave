@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Sliders, X, MapPin, Calendar, Clock, Tag, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -55,6 +55,12 @@ const EventFilters = ({
 }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  
+  const handleMapToggle = useCallback(() => {
+    if (typeof setShowMap === 'function') {
+      setShowMap(prev => !prev);
+    }
+  }, [setShowMap]);
   
   // Format date range display
   const formattedDateRange = dateRange[0]?.startDate && dateRange[0]?.endDate
@@ -122,7 +128,7 @@ const EventFilters = ({
           </button>
           
           <button
-            onClick={() => setShowMap(!showMap)}
+            onClick={handleMapToggle}
             className="flex items-center px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
             aria-label={showMap ? 'Hide map' : 'Show map'}
           >

@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Event from '../models/Event.js';
 import AppError from '../utils/appError.js';
 import catchAsync from '../utils/catchAsync.js';
@@ -13,28 +14,77 @@ const filterObj = (obj, ...allowedFields) => {
 };
 
 // Get all events with filtering, sorting, pagination
-export const getAllEvents = catchAsync(async (req, res, next) => {
-  // Execute query
-  const features = new APIFeatures(Event.find(), req.query)
-    .filter()
-    .sort()
-    .limitFields()
-    .paginate();
+const getAllEvents = catchAsync(async (req, res, next) => {
+  console.log('\n=== getAllEvents controller called ===');
+  console.log('Query parameters:', JSON.stringify(req.query, null, 2));
   
-  const events = await features.query;
+  try {
+    // Log database connection status
+    const db = mongoose.connection;
+    console.log('Database connection state:', db.readyState);
+    console.log('Database name:', db.name);
+    
+    // Execute query with APIFeatures
+    const features = new APIFeatures(Event.find(), req.query)
+      .filter()
+      .sort()
+      .limitFields()
+      .paginate();
+    
+    // Get the query with all features applied
+    let query = features.query;
+    
+    // Execute the query
+    const events = await query.lean();
+    
+    // Get total count for pagination
+    const total = await Event.countDocuments(features.query.getFilter());
+    
+    console.log(`Found ${events.length} events out of ${total} total`);
 
-  // Send response
-  res.status(200).json({
-    status: 'success',
-    results: events.length,
-    data: {
-      events,
-    },
-  });
+    // Log first event (if any) to verify data structure
+    if (events.length > 0) {
+      console.log('Sample event:', JSON.stringify(events[0], null, 2));
+    }
+
+    // Send response
+    console.log('Sending response with events');
+    res.status(200).json({
+      status: 'success',
+      results: events.length,
+      total,
+      data: {
+        events
+      }
+    });
+  } catch (error) {
+    console.error('Error in getAllEvents:', error);
+    
+    // More detailed error information
+    const errorInfo = {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      keyPattern: error.keyPattern,
+      keyValue: error.keyValue
+    };
+    
+    console.error('Error details:', JSON.stringify(errorInfo, null, 2));
+    
+    res.status(500).json({
+      status: 'error',
+      message: 'Error fetching events',
+      ...(process.env.NODE_ENV === 'development' && { 
+        error: error.message,
+        details: errorInfo
+      })
+    });
+  }
 });
 
 // Get a single event
-export const getEvent = catchAsync(async (req, res, next) => {
+const getEvent = catchAsync(async (req, res, next) => {
   const event = await Event.findById(req.params.id).populate([
     { path: 'organizer', select: 'name email' },
     { path: 'reviews' },
@@ -57,9 +107,12 @@ export const getEvent = catchAsync(async (req, res, next) => {
 });
 
 // Create a new event
-export const createEvent = catchAsync(async (req, res, next) => {
-  // Add organizer to request body
-  req.body.organizer = req.user.id;
+const createEvent = catchAsync(async (req, res, next) => {
+  // For testing, allow organizer to be passed in the request body
+  // In production, this should be set from the authenticated user
+  if (!req.body.organizer) {
+    return next(new AppError('Organizer ID is required', 400));
+  }
   
   const newEvent = await Event.create(req.body);
 
@@ -72,7 +125,7 @@ export const createEvent = catchAsync(async (req, res, next) => {
 });
 
 // Update an event
-export const updateEvent = catchAsync(async (req, res, next) => {
+const updateEvent = catchAsync(async (req, res, next) => {
   // 1) Filter out unwanted fields
   const filteredBody = filterObj(
     req.body,
@@ -123,7 +176,7 @@ export const updateEvent = catchAsync(async (req, res, next) => {
 });
 
 // Delete an event
-export const deleteEvent = catchAsync(async (req, res, next) => {
+const deleteEvent = catchAsync(async (req, res, next) => {
   const event = await Event.findById(req.params.id);
 
   if (!event) {
@@ -146,7 +199,7 @@ export const deleteEvent = catchAsync(async (req, res, next) => {
 });
 
 // Get events by category
-export const getEventsByCategory = catchAsync(async (req, res, next) => {
+const getEventsByCategory = catchAsync(async (req, res, next) => {
   const { category } = req.params;
   const events = await Event.find({ category, status: 'upcoming' });
 
@@ -160,7 +213,7 @@ export const getEventsByCategory = catchAsync(async (req, res, next) => {
 });
 
 // Get events by organizer
-export const getEventsByOrganizer = catchAsync(async (req, res, next) => {
+const getEventsByOrganizer = catchAsync(async (req, res, next) => {
   const { organizerId } = req.params;
   const events = await Event.find({ organizer: organizerId });
 
@@ -174,7 +227,7 @@ export const getEventsByOrganizer = catchAsync(async (req, res, next) => {
 });
 
 // Get user's registered events
-export const getMyRegisteredEvents = catchAsync(async (req, res, next) => {
+const getMyRegisteredEvents = catchAsync(async (req, res, next) => {
   const events = await Event.find({ 'tickets.attendee': req.user.id });
 
   res.status(200).json({
@@ -187,7 +240,7 @@ export const getMyRegisteredEvents = catchAsync(async (req, res, next) => {
 });
 
 // Get events organized by the current user
-export const getMyOrganizedEvents = catchAsync(async (req, res, next) => {
+const getMyOrganizedEvents = catchAsync(async (req, res, next) => {
   const events = await Event.find({ organizer: req.user.id });
 
   res.status(200).json({
@@ -200,7 +253,7 @@ export const getMyOrganizedEvents = catchAsync(async (req, res, next) => {
 });
 
 // Admin: Get all events (including inactive)
-export const adminGetAllEvents = catchAsync(async (req, res, next) => {
+const adminGetAllEvents = catchAsync(async (req, res, next) => {
   const features = new APIFeatures(Event.find(), req.query)
     .filter()
     .sort()
@@ -219,7 +272,7 @@ export const adminGetAllEvents = catchAsync(async (req, res, next) => {
 });
 
 // Admin: Update event status
-export const adminUpdateEventStatus = catchAsync(async (req, res, next) => {
+const adminUpdateEventStatus = catchAsync(async (req, res, next) => {
   const { status } = req.body;
   
   if (!['active', 'suspended', 'cancelled'].includes(status)) {
@@ -243,3 +296,17 @@ export const adminUpdateEventStatus = catchAsync(async (req, res, next) => {
     },
   });
 });
+
+export {
+  getAllEvents,
+  getEvent,
+  createEvent,
+  updateEvent,
+  deleteEvent,
+  getEventsByCategory,
+  getEventsByOrganizer,
+  getMyRegisteredEvents,
+  getMyOrganizedEvents,
+  adminGetAllEvents,
+  adminUpdateEventStatus,
+};

@@ -42,11 +42,18 @@ class APIFeatures {
   }
 
   paginate() {
-    const page = this.queryString.page * 1 || 1;
-    const limit = this.queryString.limit * 1 || 100;
+    const page = this.queryString.page ? this.queryString.page * 1 : 1;
+    const limit = this.queryString.limit ? this.queryString.limit * 1 : 100;
     const skip = (page - 1) * limit;
 
-    this.query = this.query.skip(skip).limit(limit);
+    // Only apply skip and limit if they are valid numbers
+    if (!isNaN(skip) && skip >= 0) {
+      this.query = this.query.skip(skip);
+    }
+    
+    if (!isNaN(limit) && limit > 0) {
+      this.query = this.query.limit(limit);
+    }
 
     return this;
   }

@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import AppError from '../utils/appError.js';
 import catchAsync from '../utils/catchAsync.js';
-import sendEmail from '../utils/email.js';
+import { sendEmail } from '../utils/email.js';
 
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -15,16 +15,23 @@ const signToken = (id) => {
 const createSendToken = (user, statusCode, res) => {
   const token = signToken(user._id);
   const cookieOptions = {
-    maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days in milliseconds
+    expires: new Date(
+      Date.now() + 90 * 24 * 60 * 60 * 1000 // 90 days
+    ),
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
+    domain: process.env.NODE_ENV === 'production' ? 'yourdomain.com' : undefined
   };
 
   // Remove password from output
   user.password = undefined;
 
+  // Set the JWT as a cookie
   res.cookie('jwt', token, cookieOptions);
-
+  
+  // Also send the token in the response body for clients that can't use cookies
   res.status(statusCode).json({
     status: 'success',
     token,
@@ -34,7 +41,7 @@ const createSendToken = (user, statusCode, res) => {
   });
 };
 
-export const signup = catchAsync(async (req, res, next) => {
+const signup = catchAsync(async (req, res, next) => {
   const newUser = await User.create({
     name: req.body.name,
     email: req.body.email,
@@ -47,7 +54,7 @@ export const signup = catchAsync(async (req, res, next) => {
   createSendToken(newUser, 201, res);
 });
 
-export const login = catchAsync(async (req, res, next) => {
+const login = catchAsync(async (req, res, next) => {
   const { email, password } = req.body;
 
   // 1) Check if email and password exist
@@ -65,7 +72,7 @@ export const login = catchAsync(async (req, res, next) => {
   createSendToken(user, 200, res);
 });
 
-export const protect = catchAsync(async (req, res, next) => {
+const protect = catchAsync(async (req, res, next) => {
   // 1) Getting token and check if it's there
   let token;
   if (
@@ -108,7 +115,7 @@ export const protect = catchAsync(async (req, res, next) => {
 });
 
 // Only for rendered pages, no errors!
-export const isLoggedIn = async (req, res, next) => {
+const isLoggedIn = async (req, res, next) => {
   if (req.cookies.jwt) {
     try {
       // 1) Verify token
@@ -138,7 +145,7 @@ export const isLoggedIn = async (req, res, next) => {
   next();
 };
 
-export const restrictTo = (...roles) => {
+const restrictTo = (...roles) => {
   return (req, res, next) => {
     // roles ['admin', 'lead-guide']. role='user'
     if (!roles.includes(req.user.role)) {
@@ -152,13 +159,13 @@ export const restrictTo = (...roles) => {
 };
 
 // Get current user's profile
-export const getMe = (req, res, next) => {
+const getMe = (req, res, next) => {
   req.params.id = req.user.id;
   next();
 };
 
 // Get user by ID
-export const getUser = catchAsync(async (req, res, next) => {
+const getUser = catchAsync(async (req, res, next) => {
   const user = await User.findById(req.params.id).select('-__v -passwordChangedAt');
 
   if (!user) {
@@ -173,7 +180,7 @@ export const getUser = catchAsync(async (req, res, next) => {
   });
 });
 
-export const logout = (req, res) => {
+const logout = (req, res) => {
   // Clear the JWT cookie with secure settings
   res.cookie('jwt', 'loggedout', {
     expires: new Date(Date.now() + 10 * 1000), // Expires in 10 seconds
@@ -196,7 +203,7 @@ export const logout = (req, res) => {
   });
 };
 
-export const forgotPassword = catchAsync(async (req, res, next) => {
+const forgotPassword = catchAsync(async (req, res, next) => {
   // 1) Get user based on POSTed email
   const user = await User.findOne({ email: req.body.email });
   if (!user) {
@@ -237,7 +244,7 @@ export const forgotPassword = catchAsync(async (req, res, next) => {
   }
 });
 
-export const resetPassword = catchAsync(async (req, res, next) => {
+const resetPassword = catchAsync(async (req, res, next) => {
   // 1) Get user based on the token
   const hashedToken = crypto
     .createHash('sha256')
@@ -264,7 +271,7 @@ export const resetPassword = catchAsync(async (req, res, next) => {
   createSendToken(user, 200, res);
 });
 
-export const updatePassword = catchAsync(async (req, res, next) => {
+const updatePassword = catchAsync(async (req, res, next) => {
   // 1) Get user from collection
   const user = await User.findById(req.user.id).select('+password');
 
@@ -279,6 +286,20 @@ export const updatePassword = catchAsync(async (req, res, next) => {
   await user.save();
   // User.findByIdAndUpdate will NOT work as intended!
 
-  // 4) Log user in, send JWT
-  createSendToken(user, 200, res);
+// 4) Log user in, send JWT
+createSendToken(user, 200, res);
 });
+
+export {
+  signup,
+  login,
+  logout,
+  protect,
+  isLoggedIn,
+  restrictTo,
+  forgotPassword,
+  resetPassword,
+  updatePassword,
+  getMe,
+  getUser,
+};

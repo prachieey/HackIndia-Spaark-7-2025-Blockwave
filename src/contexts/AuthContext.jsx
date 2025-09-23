@@ -1,197 +1,433 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { authAPI } from '../utils/api';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import { jwtDecode } from 'jwt-decode';
+import { api } from '../utils/api';
 
-const AuthContext = createContext();
+// Helper function to check if a JWT token is expired
+const isTokenExpired = (token) => {
+  try {
+    const decoded = jwtDecode(token);
+    return decoded.exp < Date.now() / 1000;
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    return true; // If we can't decode the token, consider it expired
+  }
+};
 
-export const useAuth = () => useContext(AuthContext);
+// Create auth context
+export const AuthContext = createContext(null);
+
+// Export the context for direct usage when needed
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
 
 export const AuthProvider = ({ children }) => {
-  const [state, setState] = useState(() => {
-    const storedUser = localStorage.getItem('scantyx_user');
-    return {
-      user: storedUser ? JSON.parse(storedUser) : null,
-      loading: false,
-      error: null
-    };
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // State for user and loading
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('user');
+      return stored ? JSON.parse(stored) : null;
+    } catch (error) {
+      console.error('Error parsing user data from localStorage:', error);
+      return null;
+    }
   });
-
-  // Admin credentials - use useMemo to prevent recreation
-  const ADMIN_CREDENTIALS = useMemo(() => ({
-    email: 'admin@scantyx.com',
-    password: 'admin123' // Using the password we set in createAdmin.js
-  }), []);
-
-  // Wrap state updates in useCallback to maintain referential equality
-  const setAuthState = useCallback((newState) => {
-    setState(prev => ({
-      ...prev,
-      ...(typeof newState === 'function' ? newState(prev) : newState)
-    }));
-  }, []);
-
-  const login = useCallback(async (email, password) => {
-    console.log('Login attempt with:', { email });
-    setState(prev => ({ ...prev, loading: true, error: null }));
+  
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  
+  // Track if we're currently refreshing the token to prevent multiple refresh attempts
+  const isRefreshing = useRef(false);
+  
+  // Check if user is authenticated
+  const isAuthenticated = useCallback(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return false;
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Check if admin login
-      if (email === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password) {
-        const adminUser = {
-          id: 'admin',
-          name: 'Admin',
-          email: ADMIN_CREDENTIALS.email,
-          role: 'admin',
-          createdAt: new Date().toISOString()
-        };
-        
-        setState({ 
-          user: adminUser,
-          loading: false,
-          error: null
-        });
-        
-        localStorage.setItem('scantyx_user', JSON.stringify(adminUser));
-        return { success: true };
-      }
-
-      // Regular user login
-      const mockUser = {
-        id: 'user_' + Math.random().toString(36).substr(2, 9),
-        name: email.split('@')[0],
-        email,
-        role: 'user',
-        createdAt: new Date().toISOString()
-      };
-      
-      setState(prev => ({
-        ...prev,
-        user: mockUser,
-        loading: false
-      }));
-      localStorage.setItem('scantyx_user', JSON.stringify(mockUser));
-      return { success: true };
+      const decoded = jwtDecode(token);
+      return decoded.exp * 1000 > Date.now();
     } catch (error) {
-      setState(prev => ({
-        ...prev,
-        loading: false,
-        error: error.message || 'Failed to login'
-      }));
-      return { success: false, error: error.message || 'Failed to login' };
+      console.error('Error decoding token:', error);
+      return false;
     }
-  }, [ADMIN_CREDENTIALS, setState]);
+  }, []);
 
-  const signup = async (name, email, password) => {
+  // Logout function
+  const logout = useCallback(() => {
     try {
-      // Prevent signup with admin email
-      if (email === ADMIN_EMAIL) {
-        return { success: false, error: 'This email is reserved' };
+      // Clear user state and local storage
+      setUser(null);
+      setError(null);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      
+      // Clear any pending API requests if the API client supports it
+      if (api && typeof api.clearPendingRequests === 'function') {
+        api.clearPendingRequests();
       }
-
-      await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const mockUser = {
-        id: 'user_' + Math.random().toString(36).substr(2, 9),
-        name,
-        email,
-        role: 'user',
-        createdAt: new Date().toISOString()
-      };
-      
-      setUser(mockUser);
-      localStorage.setItem('scantyx_user', JSON.stringify(mockUser));
-      return { success: true };
+      // Redirect to login page
+      navigate('/login');
     } catch (error) {
-      console.error('Error during signup:', error);
-      return { success: false, error: error.message || 'Failed to sign up' };
+      console.error('Error during logout:', error);
     }
-  };
+  }, [navigate]);
 
-  const logout = async () => {
-    console.log('[AuthContext] Logout initiated');
+  // Refresh token function
+  const refreshToken = useCallback(async () => {
     try {
-      // Try to disconnect wallet if Web3 is available
-      if (window.ethereum) {
-        console.log('[AuthContext] Disconnecting wallet');
+      const response = await api.post('/auth/refresh-token', {}, {
+        withCredentials: true
+      });
+      
+      if (response && response.data && response.data.token && response.data.user) {
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+        return response.data.token;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      return null;
+    }
+  }, []);
+
+  // Check authentication status on mount and route change
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (isInitialized) return;
+      
+      try {
+        setLoading(true);
+        
+        // Check for token in localStorage
+        const token = localStorage.getItem('token');
+        
+        if (!token) {
+          setLoading(false);
+          setIsInitialized(true);
+          return;
+        }
+        
+        // Check if token is expired
+        if (isTokenExpired(token)) {
+          console.log('Token expired, attempting to refresh...');
+          const newToken = await refreshToken();
+          if (!newToken) {
+            console.log('Failed to refresh token, logging out...');
+            logout();
+            return;
+          }
+          // Continue with the new token
+        }
+        
+        // Verify the token with the server
         try {
-          // Try to use Web3Context first
-          const { disconnectWallet } = await import('./blockchain/Web3Context');
-          if (typeof disconnectWallet === 'function') {
-            await disconnectWallet();
-            console.log('[AuthContext] Wallet disconnected via Web3Context');
+          const response = await api.get('/auth/verify', {
+            withCredentials: true
+          });
+          
+          if (response && response.valid) {
+            const userData = response.user;
+            setUser(userData);
+            localStorage.setItem('user', JSON.stringify(userData));
+          } else {
+            console.log('Token verification failed, logging out...');
+            logout();
           }
         } catch (error) {
-          console.warn('[AuthContext] Error using Web3Context, using direct ethereum API', error);
-          // Fallback to direct ethereum API
-          if (window.ethereum.removeListener) {
-            window.ethereum.removeAllListeners();
+          console.error('Error verifying token:', error);
+          // If verification fails, try to refresh the token one more time
+          if (error.status === 401) {
+            const newToken = await refreshToken();
+            if (!newToken) {
+              logout();
+              return;
+            }
+            // If we got a new token, verify it
+            try {
+              const retryResponse = await api.get('/auth/verify', {
+                withCredentials: true
+              });
+              
+              if (retryResponse && retryResponse.valid) {
+                const userData = retryResponse.user;
+                setUser(userData);
+                localStorage.setItem('user', JSON.stringify(userData));
+                return;
+              }
+            } catch (retryError) {
+              console.error('Error during token verification retry:', retryError);
+            }
           }
-          if (window.ethereum._state) {
-            window.ethereum._state.accounts = [];
-          }
-          if (window.ethereum.selectedAddress) {
-            window.ethereum.selectedAddress = null;
-          }
+          logout();
         }
-      }
-      
-      // Call the logout API
-      try {
-        console.log('[AuthContext] Calling logout API');
-        await authAPI.logout();
-        console.log('[AuthContext] Logout API call successful');
       } catch (error) {
-        console.warn('[AuthContext] Logout API call failed, but continuing with local logout', error);
+        console.error('Error in auth check:', error);
+        logout();
+      } finally {
+        setLoading(false);
+        setIsInitialized(true);
+      }
+    };
+    
+    checkAuth();
+  }, [location, logout, isInitialized, refreshToken]);
+
+  // Login function
+  const login = useCallback(
+    async (emailOrCredentials, password, options = {}) => {
+      // Handle different parameter patterns
+      let loginEmail, loginPassword, rememberMe;
+      
+      if (typeof emailOrCredentials === 'object') {
+        // Handle case where first argument is an object
+        const credentials = emailOrCredentials;
+        loginEmail = credentials.email || '';
+        loginPassword = credentials.password || '';
+        rememberMe = credentials.rememberMe || false;
+      } else {
+        // Handle case where email and password are separate parameters
+        loginEmail = emailOrCredentials || '';
+        loginPassword = password || '';
+        rememberMe = options.rememberMe || false;
       }
       
-      // Clear all local data
-      console.log('[AuthContext] Clearing local storage and state');
-      setUser(null);
-      localStorage.removeItem('scantyx_user');
-      localStorage.removeItem('auth_token');
-      sessionStorage.clear();
+      // Validate inputs
+      if (!loginEmail.trim()) {
+        throw new Error('Email is required');
+      }
+      if (!loginPassword) {
+        throw new Error('Password is required');
+      }
       
-      // Clear any remaining cookies by setting an expired cookie
-      console.log('[AuthContext] Clearing cookies');
-      document.cookie = 'jwt=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-      document.cookie = 'connect.sid=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      setLoading(true);
+      setError(null);
       
-      console.log('[AuthContext] Logout completed successfully');
-      return { success: true };
+      console.log('Starting login process...');
+      console.log('Email:', loginEmail);
+      console.log('Remember me:', rememberMe);
+
+      try {
+        console.log('Calling auth.login with credentials...', { 
+          email: loginEmail, 
+          hasPassword: !!loginPassword,
+          rememberMe 
+        });
+        
+        // Add a timeout to prevent hanging
+        const loginPromise = api.auth.login({
+          email: loginEmail,
+          password: loginPassword,
+          rememberMe
+        });
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Login request timed out after 30 seconds')), 30000)
+        );
+        
+        const response = await Promise.race([loginPromise, timeoutPromise]);
+        console.log('Auth login response:', response);
+
+        // Check if we have a valid response with user data
+        if (response && (response.user || response.data?.user || response.data)) {
+          // Handle different response formats
+          const userData = response.user || response.data?.user || response.data;
+          const token = response.token || response.data?.token || localStorage.getItem('token');
+          
+          console.log('Login successful, user data:', {
+            id: userData._id,
+            email: userData.email,
+            role: userData.role,
+            hasToken: !!token
+          });
+          
+          // Store the token in localStorage if available
+          if (token) {
+            localStorage.setItem('token', token);
+            console.log('Token stored in localStorage');
+          } else {
+            console.warn('No token received in login response');
+          }
+          
+          // Update user state and localStorage
+          setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
+          
+          // Show success message
+          toast.success('Logged in successfully!');
+          
+          // Redirect to the intended URL or home
+          const from = location.state?.from?.pathname || '/';
+          console.log('Redirecting after login to:', from);
+          navigate(from, { replace: true });
+          
+          return { success: true, user: userData };
+        } else {
+          const errorMsg = response?.message || 'Login failed: Invalid response from server';
+          console.error('Login failed - Invalid response:', {
+            response,
+            hasUserData: !!(response?.user || response?.data?.user || response?.data),
+            hasToken: !!(response?.token || response?.data?.token)
+          });
+          throw new Error(errorMsg);
+        }
+      } catch (error) {
+        // Enhanced error logging
+        const errorDetails = {
+          name: error.name,
+          message: error.message,
+          code: error.code,
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+            withCredentials: error.config?.withCredentials,
+            headers: error.config?.headers
+          },
+          response: error.response?.data || 'No response data',
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        };
+        
+        console.error('Login error details:', JSON.stringify(errorDetails, null, 2));
+        
+        // Log to server if available
+        if (window.trackJs) {
+          window.trackJs.track(error);
+        }
+        
+        // Extract user-friendly error message
+        let errorMessage = 'Login failed. Please try again.';
+        
+        if (error.response) {
+          // The request was made and the server responded with a status code
+          // that falls out of the range of 2xx
+          const { status, data } = error.response;
+          
+          if (status === 401) {
+            errorMessage = data?.message || 'Invalid email or password. Please try again.';
+          } else if (status === 403) {
+            errorMessage = data?.message || 'Access denied. Please verify your account or contact support.';
+          } else if (status === 429) {
+            errorMessage = 'Too many login attempts. Please try again later.';
+          } else if (status >= 500) {
+            errorMessage = 'Server error. Please try again later or contact support if the problem persists.';
+          } else if (data?.message) {
+            errorMessage = data.message;
+          }
+        } else if (error.request) {
+          // The request was made but no response was received
+          errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+        } else if (error.message) {
+          // Something happened in setting up the request that triggered an Error
+          errorMessage = error.message;
+        }
+        
+        // Update error state and show toast
+        setError(errorMessage);
+        toast.error(errorMessage, {
+          position: 'top-right',
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true,
+          pauseOnHover: true,
+          draggable: true
+        });
+        
+        // Clear any partial auth data
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+        
+        return { 
+          success: false, 
+          error: errorMessage,
+          status: error.response?.status,
+          data: error.response?.data
+        };
+      } finally {
+        setLoading(false);
+      }
+    },
+    [navigate, location.state]
+  );
+
+  // Signup function
+  const signup = useCallback(async (userData) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Validate required fields
+      if (!userData.name || !userData.email || !userData.password) {
+        throw new Error('Please provide all required fields');
+      }
+      
+      // Use the auth.register function from the API service
+      const result = await auth.register({
+        name: userData.name.trim(),
+        email: userData.email.trim(),
+        password: userData.password,
+        passwordConfirm: userData.passwordConfirm || userData.password
+      });
+      
+      console.log('Signup result:', result);
+      
+      if (result && (result.user || result.data?.user)) {
+        const user = result.user || result.data.user;
+        setUser(user);
+        
+        // Store the token if available
+        if (result.token) {
+          localStorage.setItem('token', result.token);
+        }
+        
+        // Store user data
+        localStorage.setItem('user', JSON.stringify(user));
+        
+        // Show success message
+        toast.success('Registration successful! You are now logged in.');
+        
+        // Redirect to home or intended URL
+        const from = location.state?.from?.pathname || '/';
+        navigate(from, { replace: true });
+        
+        return { success: true, user };
+      }
+      
+      throw new Error('Registration failed. Please try again.');
     } catch (error) {
-      console.error('[AuthContext] Error during logout:', error);
-      // Ensure we still clear local data even if there's an error
-      setUser(null);
-      localStorage.removeItem('scantyx_user');
-      localStorage.removeItem('auth_token');
-      sessionStorage.clear();
-      return { success: false, error: error.message || 'Failed to logout' };
+      console.error('Signup error:', error);
+      const errorMsg = error.message || 'An error occurred during signup. Please try again.';
+      setError(errorMsg);
+      toast.error(errorMsg);
+      return { success: false, error: errorMsg };
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [navigate, location.state]);
 
-  // Memoize the context value to prevent unnecessary re-renders
+  // Value to be provided by the context
   const contextValue = useMemo(() => ({
-    user: state.user,
-    loading: state.loading,
-    isAuthenticated: !!state.user,
-    isAdmin: state.user?.role === 'admin',
+    user,
+    loading,
+    error,
     login,
-    signup,
     logout,
-    setAuthState
-  }), [state.user, state.loading, login, signup, logout, setAuthState]);
-
-  // Debug: Log when auth state changes
-  useEffect(() => {
-    console.log('Auth state updated:', {
-      user: state.user,
-      isAuthenticated: !!state.user,
-      isAdmin: state.user?.role === 'admin',
-      loading: state.loading
-    });
-  }, [state.user, state.loading]);
+    isAuthenticated: !!user,
+    isInitialized,
+  }), [user, loading, error, login, logout, isInitialized]);
 
   return (
     <AuthContext.Provider value={contextValue}>

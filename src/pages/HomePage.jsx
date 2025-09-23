@@ -1,28 +1,92 @@
-import React, { useState } from 'react';
-import { Link, useOutletContext } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { QrCode, Shield, Repeat, CreditCard, ChevronRight, Star } from 'lucide-react';
 import { useEvents } from '../contexts/EventsContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useAuthModal } from '../contexts/AuthModalContext';
 import EventCard from '../components/events/EventCard';
 import QRTicket from '../components/tickets/QRTicket';
 import TestimonialsSection from '../components/testimonials/TestimonialsSection';
 import FeaturesSection from '../components/features/FeaturesSection';
 
 const HomePage = () => {
-  const { openAuthModal } = useOutletContext();
-  const { events, userTickets, listTicketForResale } = useEvents();
-  const { isAuthenticated } = useAuth();
+  const { openAuthModal } = useAuthModal();
+  const { events } = useEvents();
+  const { user, isAuthenticated } = useAuth();
   const [showResellModal, setShowResellModal] = useState(false);
+  const navigate = useNavigate();
   const [selectedTicketId, setSelectedTicketId] = useState(null);
   const [resalePrice, setResalePrice] = useState('');
   const [resaleMessage, setResaleMessage] = useState({ type: '', text: '' });
+  
+  // Debug: Log auth state changes
+  useEffect(() => {
+    console.log('HomePage - Auth state changed:', { 
+      isAuthenticated, 
+      user: user ? { id: user.id, email: user.email } : null,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Check localStorage for debugging
+    const storedUser = localStorage.getItem('scantyx_user');
+    console.log('Stored user in localStorage:', storedUser ? JSON.parse(storedUser) : null);
+  }, [isAuthenticated, user]);
 
   // Get featured events (first 3)
-  const featuredEvents = events.slice(0, 3);
+  const featuredEvents = events?.slice(0, 3) || [];
   
+  // Initialize userTickets state
+  const [userTickets, setUserTickets] = useState([]);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
+  const [ticketsError, setTicketsError] = useState(null);
+
+  // Fetch user tickets when authenticated
+  useEffect(() => {
+    const fetchUserTickets = async () => {
+      if (!isAuthenticated) {
+        setUserTickets([]);
+        return;
+      }
+
+      setTicketsLoading(true);
+      setTicketsError(null);
+      
+      try {
+        // Replace this with your actual API call to fetch user tickets
+        // const response = await fetch('/api/tickets/my-tickets');
+        // const data = await response.json();
+        // setUserTickets(data);
+        
+        // For now, using mock data
+        setUserTickets([]);
+      } catch (error) {
+        console.error('Error fetching user tickets:', error);
+        setTicketsError('Failed to load your tickets');
+      } finally {
+        setTicketsLoading(false);
+      }
+    };
+
+    fetchUserTickets();
+  }, [isAuthenticated]);
+
   // Get resellable tickets (not used, not already for sale)
-  const resellableTickets = userTickets.filter(ticket => !ticket.isUsed && !ticket.isForSale);
+  const resellableTickets = userTickets?.filter(ticket => !ticket.isUsed && !ticket.isForSale) || [];
+  
+  const handleCreateEvent = (e) => {
+    if (!isAuthenticated) {
+      e.preventDefault();
+      openAuthModal('signup');
+    } else {
+      navigate('/user/create-event');
+    }
+  };
+
+  const handleExploreEvents = (e) => {
+    e.preventDefault();
+    navigate('/explore');
+  };
 
   const handleResellClick = (ticketId) => {
     setSelectedTicketId(ticketId);
@@ -61,20 +125,6 @@ const HomePage = () => {
     }
   };
 
-  // Handle create event button click
-  const handleCreateEvent = (e) => {
-    if (!isAuthenticated) {
-      e.preventDefault();
-      openAuthModal('signup');
-    }
-  };
-
-  // Handle explore events button click
-  const handleExploreEvents = (e) => {
-    e.preventDefault();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   return (
     <>
       {/* Hero Section */}
@@ -103,7 +153,7 @@ const HomePage = () => {
                 eliminating fraud and making event attendance seamless.
               </p>
               
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-wrap gap-4">
                 {isAuthenticated ? (
                   <Link 
                     to="/user/create-event" 
@@ -114,21 +164,20 @@ const HomePage = () => {
                   </Link>
                 ) : (
                   <button 
-                    onClick={(e) => openAuthModal('signup')} 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      console.log('Get Started clicked');
+                      openAuthModal('signup');
+                    }} 
                     className="btn btn-primary"
                   >
                     Get Started
                   </button>
                 )}
                 <Link 
-                  to="/explore" 
+                  to="/explore"
                   className="btn btn-outline"
-                  onClick={handleExploreEvents}
                 >
-                  Explore Events
-                </Link>
-                
-                <Link to="/explore" className="btn btn-secondary">
                   Explore Events
                 </Link>
               </div>
@@ -289,9 +338,16 @@ const HomePage = () => {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {featuredEvents.map(event => (
-              <EventCard key={event.id} event={event} />
-            ))}
+            {featuredEvents.map((event, index) => {
+              // Ensure we have a unique key - use event.id if available, otherwise fall back to index
+              const uniqueKey = event?.id ? `event-${event.id}` : `event-${index}`;
+              return (
+                <EventCard 
+                  key={uniqueKey} 
+                  event={event} 
+                />
+              );
+            })}
           </div>
         </div>
       </section>

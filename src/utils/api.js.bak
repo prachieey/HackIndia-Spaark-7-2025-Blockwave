@@ -1,0 +1,277 @@
+// api.js
+// ============================================================================
+// Base API configuration
+// ============================================================================
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL ||
+  `http://localhost:${import.meta.env.VITE_BACKEND_PORT || '5001'}/api/${import.meta.env.VITE_API_VERSION || 'v1'}`
+).replace(/\/+$/, '');
+
+// ============================================================================
+// Helper function: Clean up all auth data
+// ============================================================================
+const cleanAuthData = () => {
+  console.log('Cleaning up all auth data');
+
+  // Clear all possible token storage locations
+  const tokenKeys = [
+    'token',
+    'scantyx_token',
+    'auth_token',
+    'scantyx_user',
+    'user',
+    'authState'
+  ];
+
+  // Clear from localStorage and sessionStorage
+  tokenKeys.forEach((key) => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
+
+  // Clear all cookies
+  document.cookie.split(';').forEach((cookie) => {
+    const name = cookie.split('=')[0].trim();
+    document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;`;
+  });
+};
+
+// ============================================================================
+// Helper function: Core API request
+// ============================================================================
+async function apiRequest(endpoint, options = {}) {
+  // Clean up the endpoint by removing leading/trailing slashes
+  const cleanEndpoint = endpoint.replace(/^\/+|\/+$/g, '');
+  const url = `${API_BASE_URL}/${cleanEndpoint}`;
+
+  // Skip adding auth headers for these endpoints
+  const publicEndpoints = [
+    '/auth/login',
+    '/auth/register',
+    '/auth/refresh',
+    '/events',
+    '/events/',
+  ].map((path) => path.toLowerCase());
+  const isPublic = publicEndpoints.some((ep) => url.toLowerCase().endsWith(ep));
+
+  const defaultHeaders = {
+    'Content-Type': 'application/json',
+  };
+
+  // ================================================================
+  // Get and clean the token
+  // ================================================================
+  let token = null;
+  if (!isPublic) {
+    const tokenKeys = [
+      'token',
+      'scantyx_token',
+      'auth_token',
+      'firebase:authUser:AIzaSyB2d9lJh7WqYlOoQqQ6VjKQ7q4jVz9XyYk:[DEFAULT]',
+    ];
+
+    for (const key of tokenKeys) {
+      try {
+        const storedToken =
+          localStorage.getItem(key) || sessionStorage.getItem(key);
+        if (storedToken) {
+          if (import.meta.env.DEV) {
+            console.log(`Found token in ${key}`, storedToken.substring(0, 20) + '...');
+          }
+
+          try {
+            let parsedToken = storedToken;
+            try {
+              const parsed = JSON.parse(storedToken);
+              if (parsed && (parsed.stsTokenManager?.accessToken || parsed.token)) {
+                parsedToken =
+                  parsed.stsTokenManager?.accessToken || parsed.token;
+              }
+            } catch {
+              // Not JSON; use as is
+              parsedToken = storedToken;
+            }
+
+            token = parsedToken.replace(/^[\"\s]+|[\"\s]+$/g, '').trim();
+            if (token) {
+              defaultHeaders['Authorization'] = `Bearer ${token}`;
+              if (import.meta.env.DEV) {
+                console.log('Using token:', token.substring(0, 10) + '...');
+              }
+              break;
+            }
+          } catch (e) {
+            console.error(`Error processing token from ${key}:`, e);
+          }
+        }
+      } catch (error) {
+        console.error(`Error reading token from storage (${key}):`, error);
+      }
+    }
+  }
+
+  // ================================================================
+  // Configure request
+  // ================================================================
+  const config = {
+    ...options,
+    headers: {
+      ...defaultHeaders,
+      ...(options.headers || {}),
+      ...(options.method === 'GET'
+        ? {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            Pragma: 'no-cache',
+            Expires: '0',
+          }
+        : {}),
+    },
+    credentials: 'omit', // never include cookies
+    cache: 'no-store',
+  };
+
+  // Add auth header if we have a token
+  if (token && !isPublic) {
+    try {
+      const cleanToken = token.replace(/^["\s]+|["\s]+$/g, '').trim();
+      if (cleanToken) {
+        config.headers['Authorization'] = `Bearer ${cleanToken}`;
+      } else {
+        console.warn('Empty token found after cleaning');
+        cleanAuthData();
+      }
+    } catch (error) {
+      console.error('Error processing token:', error);
+      cleanAuthData();
+    }
+  }
+
+  // Log request details in development
+  if (import.meta.env.DEV) {
+    console.log(`API ${config.method || 'GET'} ${url}`, {
+      hasToken: !!token,
+      isPublic,
+    });
+  }
+
+  // ================================================================
+  // Perform request
+  // ================================================================
+  try {
+    const response = await fetch(url, config);
+
+    // Handle 204 No Content
+    if (response.status === 204) {
+      return null;
+    }
+
+    let data;
+    const contentType = response.headers.get('content-type');
+
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+    }
+
+    console.log(`API Response [${response.status}]:`, { url, data });
+
+    if (!response.ok) {
+      // Handle 431 Request Header Fields Too Large
+      if (response.status === 431) {
+        console.error('Request headers too large - performing full cleanup');
+        cleanAuthData();
+        const error = new Error('Session expired. Please log in again.');
+        error.status = 401;
+        error.isSessionExpired = true;
+
+        if (!window.location.pathname.includes('/login')) {
+          window.history.replaceState({}, '', '/login?error=session_expired');
+          window.location.reload();
+        }
+        throw error;
+      }
+
+      const error = new Error(
+        data?.message || `Request failed with status ${response.status}`
+      );
+      error.status = response.status;
+      error.data = data;
+      error.response = response;
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('API request failed:', {
+      url,
+      error: error.message,
+      status: error.status,
+      data: error.data,
+      stack: error.stack,
+    });
+
+    if (!(error instanceof Error)) {
+      const newError = new Error('API request failed');
+      newError.originalError = error;
+      throw newError;
+    }
+
+    throw error;
+  }
+}
+
+// ============================================================================
+// Auth API
+// ============================================================================
+
+export const authAPI = {
+  login: (credentials) =>
+    apiRequest('auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    }),
+
+  logout: () =>
+    apiRequest('auth/logout', {
+      method: 'POST',
+    }),
+
+  getCurrentUser: () => apiRequest('auth/me'),
+};
+
+// ============================================================================
+// Events API
+// ============================================================================
+export const eventsAPI = {
+  createEvent: (eventData) =>
+    apiRequest('events', {
+      method: 'POST',
+      body: JSON.stringify(eventData),
+    }),
+
+  getEvents: () => apiRequest('events'),
+
+  getEvent: (id) => apiRequest(`events/${id}`),
+
+  updateEvent: (id, eventData) =>
+    apiRequest(`events/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(eventData),
+    }),
+
+  deleteEvent: (id) =>
+    apiRequest(`events/${id}`, {
+      method: 'DELETE',
+    }),
+};
+
+// ============================================================================
+// Default export
+// ============================================================================
+export default apiRequest;

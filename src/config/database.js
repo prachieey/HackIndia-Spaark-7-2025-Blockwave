@@ -1,12 +1,34 @@
-require('dotenv').config();
-const mongoose = require('mongoose');
-const logger = require('../utils/logger');
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import winston from 'winston';
+import 'winston-daily-rotate-file';
+
+const { createLogger, format, transports } = winston;
+
+dotenv.config();
+
+// Create a logger instance
+const logger = createLogger({
+  level: 'info',
+  format: format.combine(
+    format.timestamp(),
+    format.json()
+  ),
+  transports: [
+    new transports.Console({
+      format: format.combine(
+        format.colorize(),
+        format.simple()
+      )
+    })
+  ]
+});
 
 const {
   NODE_ENV = 'development',
   MONGODB_URI,
-  MONGODB_URI_DEV = 'mongodb://localhost:27017/scantyx-dev',
-  MONGODB_URI_TEST = 'mongodb://localhost:27017/scantyx-test'
+  MONGODB_URI_DEV = 'mongodb://127.0.0.1:27017/scantyx-dev?directConnection=true',
+  MONGODB_URI_TEST = 'mongodb://127.0.0.1:27017/scantyx-test?directConnection=true'
 } = process.env;
 
 // Select the appropriate database URI based on environment
@@ -26,15 +48,28 @@ const getMongoURI = () => {
   }
 };
 
+// MongoDB connection options
+const mongoOptions = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 5000,
+  connectTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+};
+
 const connectDB = async () => {
   try {
     const mongoURI = getMongoURI();
     
+    console.log(`Attempting to connect to MongoDB at: ${mongoURI}`);
+    
     const conn = await mongoose.connect(mongoURI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
-      socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+      serverSelectionTimeoutMS: 10000, // Increased timeout to 10s
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 10000, // Added connection timeout
+      family: 4, // Use IPv4, skip trying IPv6
     });
 
     logger.info(`MongoDB Connected: ${conn.connection.host} [${NODE_ENV}]`);
@@ -85,4 +120,10 @@ const clearDB = async () => {
   }
 };
 
-module.exports = { connectDB, closeDB, clearDB };
+// Export functions
+export { 
+  connectDB, 
+  closeDB, 
+  clearDB,
+  getMongoURI 
+};

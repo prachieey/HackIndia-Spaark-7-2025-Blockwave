@@ -6,6 +6,7 @@ import AuthModal from '../components/auth/AuthModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Toaster } from 'react-hot-toast';
 import { ThemeProvider } from '../contexts/ThemeContext';
+import PageContainer from '../components/layout/PageContainer';
 
 const MainLayout = () => {
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -110,23 +111,24 @@ const MainLayout = () => {
         />
 
         <Navbar openAuthModal={openAuthModal} />
-        
-        <AnimatePresence mode="wait">
-          <motion.main
-            key={location.pathname}
-            className="flex-grow"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-          >
+      
+      <PageContainer>
+        <motion.main 
+          className="min-h-[calc(100vh-300px)]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <AnimatePresence mode="wait">
             <Outlet context={{ openAuthModal }} />
-          </motion.main>
-        </AnimatePresence>
+          </AnimatePresence>
+        </motion.main>
         
         <Footer />
-        
-        <AuthModal 
+      </PageContainer>
+      
+      <AuthModal 
           isOpen={authModalOpen} 
           onClose={closeAuthModal}
           authType={authType}

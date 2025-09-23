@@ -21,19 +21,35 @@ export const ThemeProvider = ({ children }) => {
     // Remove all theme classes
     root.classList.remove('light', 'dark');
     
-    // Determine which theme to apply
-    const effectiveTheme = themeToApply === 'system' ? getSystemTheme() : themeToApply;
-    
-    // Add the current theme class
-    root.classList.add(effectiveTheme);
-    
-    // Save to localStorage
-    localStorage.setItem('theme', themeToApply);
-    
-    // Update meta theme-color for mobile browsers
-    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-    if (metaThemeColor) {
-      metaThemeColor.content = effectiveTheme === 'dark' ? '#1f2937' : '#ffffff';
+    try {
+      // Ensure themeToApply is a string
+      const themeStr = String(themeToApply || '').trim();
+      
+      // Determine which theme to apply
+      const effectiveTheme = themeStr === 'system' ? getSystemTheme() : 
+                           (themeStr === 'dark' ? 'dark' : 'light');
+      
+      // Only add the theme class if it's a valid string
+      if (effectiveTheme && typeof effectiveTheme === 'string') {
+        root.classList.add(effectiveTheme);
+      } else {
+        // Fallback to light theme if no valid theme is found
+        console.warn('Invalid theme value, defaulting to light theme');
+        root.classList.add('light');
+      }
+      
+      // Save to localStorage
+      localStorage.setItem('theme', themeStr);
+      
+      // Update meta theme-color for mobile browsers
+      const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+      if (metaThemeColor) {
+        metaThemeColor.content = effectiveTheme === 'dark' ? '#1f2937' : '#ffffff';
+      }
+    } catch (error) {
+      console.error('Error applying theme:', error);
+      // Ensure we always have a valid theme
+      root.classList.add('light');
     }
   }, [getSystemTheme]);
 

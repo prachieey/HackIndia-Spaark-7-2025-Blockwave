@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FaStar, FaStarHalfAlt, FaRegStar } from 'react-icons/fa';
-import { getReviewStats } from '../../services/reviewService';
+import { getEventReviewStats } from '../../services/reviewService';
 
 const ReviewSummary = ({ eventId, onReviewSubmit }) => {
   const [stats, setStats] = useState({
@@ -15,7 +15,7 @@ const ReviewSummary = ({ eventId, onReviewSubmit }) => {
     const fetchStats = async () => {
       try {
         setIsLoading(true);
-        const data = await getReviewStats(eventId);
+        const data = await getEventReviewStats(eventId);
         setStats({
           averageRating: data.averageRating || 0,
           totalReviews: data.totalReviews || 0,
@@ -61,12 +61,33 @@ const ReviewSummary = ({ eventId, onReviewSubmit }) => {
   };
 
   if (isLoading) {
-    return <div className="text-center py-4">Loading review summary...</div>;
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 bg-gray-200 rounded w-1/3"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+        </div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="text-red-500 text-center py-4">{error}</div>;
+    return (
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <div className="text-center text-red-500 py-4">
+          <p>{error}</p>
+          <button 
+            onClick={() => fetchStats()} 
+            className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    );
   }
+
+  const hasReviews = stats.totalReviews > 0;
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
@@ -75,13 +96,23 @@ const ReviewSummary = ({ eventId, onReviewSubmit }) => {
       <div className="md:flex items-center mb-6">
         <div className="text-center md:text-left md:mr-10 mb-4 md:mb-0">
           <div className="text-4xl font-bold text-gray-800">
-            {stats.averageRating.toFixed(1)}
+            {hasReviews ? stats.averageRating.toFixed(1) : '0.0'}
           </div>
           <div className="flex justify-center md:justify-start my-2">
-            {renderStars(stats.averageRating)}
+            {hasReviews ? (
+              renderStars(stats.averageRating)
+            ) : (
+              <div className="flex">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <FaRegStar key={star} className="text-gray-300" />
+                ))}
+              </div>
+            )}
           </div>
           <div className="text-sm text-gray-600">
-            Based on {stats.totalReviews} review{stats.totalReviews !== 1 ? 's' : ''}
+            {hasReviews 
+              ? `Based on ${stats.totalReviews} review${stats.totalReviews !== 1 ? 's' : ''}`
+              : 'No reviews yet'}
           </div>
         </div>
         
