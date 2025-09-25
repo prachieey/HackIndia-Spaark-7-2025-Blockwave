@@ -22,10 +22,12 @@ import CreateEventPage from './pages/CreateEventPage.jsx';
 import DemoPage from './pages/DemoPage.jsx';
 import ContactPage from './pages/ContactPage.jsx';
 import TestimonialsPage from './pages/TestimonialsPage.jsx';
-// Login page has been removed - redirects to home
 import NotFoundPage from './pages/NotFoundPage.jsx';
-import TicketsPage from './pages/TicketsPage.jsx';
+import ResellTicketsPage from './pages/ResellTicketsPage.jsx';
+import AboutPage from './pages/AboutPage.jsx';
 import TicketDetailPage from './pages/TicketDetailPage.jsx';
+import PaymentPage from './pages/PaymentPage.jsx';
+import PaymentSuccessPage from './pages/PaymentSuccessPage.jsx';
 
 // Admin Pages
 import AdminDashboardPage from './pages/admin/DashboardPage.jsx';
@@ -195,17 +197,33 @@ function AppContent() {
           <Route path="/" element={<MainLayout />}>
             <Route index element={<HomePage />} />
             <Route path="explore" element={<ExplorePage />} />
-            <Route path="events" element={<DemoPage />} />
+            <Route path="resell" element={<ResellTicketsPage />} />
             <Route path="events/blockchain/:id" element={<BlockchainEventPage />} />
             <Route path="events/:eventId" element={<EventDetailsPage />} />
-            <Route path="tickets" element={<TicketsPage />} />
+            <Route path="about" element={<AboutPage />} />
             <Route path="tickets/:id" element={<TicketDetailPage />} />
-            <Route path="/demo" element={<Navigate to="/events" replace />} />
+            <Route path="/demo" element={<Navigate to="/resell" replace />} />
             <Route path="/contact" element={<ContactPage />} />
+            {/* Redirect old routes to new ones */}
+            <Route path="events" element={<Navigate to="/resell" replace />} />
+            <Route path="tickets" element={<Navigate to="/about" replace />} />
             <Route path="/testimonials" element={<TestimonialsPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
             <Route path="/login" element={<LoginRedirect />} />
+            
+            {/* Payment Routes */}
+            <Route path="/payment" element={
+              <ProtectedRoute>
+                <PaymentPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/payment-success" element={
+              <ProtectedRoute>
+                <PaymentSuccessPage />
+              </ProtectedRoute>
+            } />
+            
             <Route path="*" element={<NotFoundPage />} />
           </Route>
 

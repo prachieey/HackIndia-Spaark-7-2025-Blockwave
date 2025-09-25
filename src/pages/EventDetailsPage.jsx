@@ -123,94 +123,53 @@ const calculateTimeLeft = (date) => {
 };
 
 const createGenericEvent = (eventId) => ({
-  _id: eventId,
-  title: `Event ${eventId}`,
+  _id: eventId || 'generic-event',
+  title: `Event ${eventId || 'Generic'}`,
   description: 'Placeholder event',
-  image: 'https://source.unsplash.com/random/800x600/?event',
+  startTime: new Date(Date.now() + 86400000).toISOString(),
+  endTime: new Date(Date.now() + 2 * 86400000).toISOString(),
   startDate: new Date(Date.now() + 86400000).toISOString(),
-  endDate: new Date(Date.now() + 172800000).toISOString(),
-  location: 'Unknown',
-  venue: { name: 'Unknown', address: 'Unknown', city: 'Unknown' },
-  category: 'Other',
-  minPrice: 0,
-  maxPrice: 0,
+  endDate: new Date(Date.now() + 2 * 86400000).toISOString(),
+  location: 'TBD',
+  venue: {
+    name: 'Venue not specified',
+    address: '',
+    city: '',
+    capacity: 100,
+    mapImage: '',
+    parking: '',
+    accessibility: ''
+  },
+  image: 'https://images.unsplash.com/photo-1505373876331-ff89af6ab66e?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1470&q=80',
+  category: 'General',
   capacity: 100,
   registered: 0,
+  availableTickets: 100,
+  price: 0,
+  minPrice: 0,
+  maxPrice: 0,
+  hasMultiplePrices: false,
   isFree: true,
   rating: 0,
   reviewCount: 0,
-  ticketTypes: [{ id: '1', name: 'General', price: 0, quantity: 100, available: 100 }],
-  organizer: { name: 'Unknown', email: 'unknown@example.com' },
-  performers: [],
-  schedule: [],
-  faqs: [],
-  availableTickets: 100,
-  soldTickets: 0,
-  __isFallback: true
-});
-
-const sampleEvent = {
-  _id: 'summer-fest-2026',
-  title: 'Summer Music Festival 2026',
-  description: 'Join us for the biggest music festival of the year featuring top artists from around the world. Experience an unforgettable weekend of music, food, and fun!',
-  image: 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&w=1740&q=80',
-  startDate: '2026-07-15T18:00:00+05:30',
-  endDate: '2026-07-17T23:00:00+05:30',
-  location: 'Marine Drive, Mumbai',
-  venue: {
-    name: 'Marine Drive Promenade',
-    address: 'Netaji Subhash Chandra Bose Road',
-    city: 'Mumbai, MH 400001',
-    capacity: 50000,
-    mapImage: 'https://maps.googleapis.com/maps/api/staticmap?center=18.9330,72.8235&zoom=15&size=600x300&maptype=roadmap&markers=color:red%7C18.9330,72.8235&key=YOUR_API_KEY',
-    parking: 'Limited street parking available. Recommend using public transport or ride-sharing.',
-    accessibility: 'Wheelchair accessible areas available. Contact organizer for special arrangements.'
-  },
-  category: 'Music Festival',
-  minPrice: 2500,
-  maxPrice: 10000,
-  hasMultiplePrices: true,
-  capacity: 50000,
-  registered: 15000,
-  isFree: false,
-  rating: 4.8,
-  reviewCount: 1567,
   organizer: {
-    id: 'festival-productions',
-    name: 'Festival Productions India Pvt. Ltd.',
-    email: 'info@festivalproductions.in',
-    phone: '+91 22 1234 5678',
-    website: 'https://festivalproductions.in',
-    description: 'Leading event management company specializing in music festivals and concerts across India.',
-    logo: 'https://source.unsplash.com/random/200x200/?company'
+    id: 'generic-organizer',
+    name: 'Event Organizer',
+    email: 'info@example.com',
+    phone: '',
+    website: '',
+    description: '',
+    logo: ''
   },
   ticketTypes: [
     {
       id: 'general',
       name: 'General Admission',
-      price: 2500,
-      quantity: 30000,
-      available: 15000,
-      description: 'Access to all general areas',
-      benefits: ['General entry', 'Access to food courts', 'Standard viewing areas']
-    },
-    {
-      id: 'vip',
-      name: 'VIP Pass',
-      price: 5000,
-      quantity: 5000,
-      available: 2000,
-      description: 'Premium access with VIP amenities',
-      benefits: ['Fast track entry', 'VIP lounge', 'Premium viewing platform', 'Complimentary drinks']
-    },
-    {
-      id: 'platinum',
-      name: 'Platinum Experience',
-      price: 10000,
-      quantity: 500,
-      available: 150,
-      description: 'Ultimate festival experience',
-      benefits: ['Backstage access', 'Meet & greet', 'All VIP benefits', 'Exclusive merchandise', 'Dedicated concierge']
+      price: 0,
+      quantity: 100,
+      available: 100,
+      description: 'Standard admission',
+      benefits: ['General entry']
     }
   ],
   performers: [
@@ -293,7 +252,11 @@ const sampleEvent = {
       question: 'Are there COVID-19 protocols?',
       answer: 'Please check current guidelines. Masks may be required.'
     }
-  ],
+  ]
+});
+
+// Sample data for testing
+const sampleEventData = {
   policies: {
     refund: 'No refunds unless event is cancelled or rescheduled.',
     transfer: 'Tickets can be transferred via the app.',
@@ -336,18 +299,18 @@ const EventDetailsPage = () => {
   const { getEventById, purchaseTicket, addReview } = useEvents();
   const { user, isAuthenticated } = useAuth();
 
-  // Create a generic event object as fallback
-  const createGenericEvent = (eventId) => ({
+  // Create a default event object
+  const defaultEvent = useMemo(() => ({
     _id: eventId,
     title: `Event ${eventId}`,
-    description: 'Placeholder event',
+    description: 'Loading event details...',
     image: 'https://source.unsplash.com/random/800x600/?event',
     startDate: new Date(Date.now() + 86400000).toISOString(),
     endDate: new Date(Date.now() + 172800000).toISOString(),
     location: 'Unknown',
     venue: { 
-      name: 'Unknown Venue', 
-      address: 'Address not available', 
+      name: 'Venue not specified',
+      address: 'Address not available',
       city: 'Unknown',
       parking: 'No parking information available',
       accessibility: 'No accessibility information available',
@@ -383,7 +346,7 @@ const EventDetailsPage = () => {
     availableTickets: 100,
     soldTickets: 0,
     __isFallback: true
-  });
+  }), [eventId]);
 
   const [event, setEvent] = useState(null);
   const [reviews, setReviews] = useState(sampleReviews);
@@ -1002,7 +965,7 @@ const EventDetailsPage = () => {
 
               <TabsContent value="details" className="mt-6">
                 <h2 className="text-3xl font-bold mb-4">Event Details</h2>
-                <p className="text-gray-600 mb-6">{event.description || 'No description available'}</p>
+                <p className="text-gray-800 mb-6">{event.description || 'No description available'}</p>
                 <h3 className="text-2xl font-semibold mb-4">Organizer Information</h3>
                 <div className="bg-white p-6 rounded-lg shadow">
                   <div className="flex items-center gap-4 mb-4">
@@ -1013,7 +976,7 @@ const EventDetailsPage = () => {
                     />
                     <div>
                       <h4 className="font-bold text-xl">{event.organizer?.name || 'Unknown'}</h4>
-                      <p className="text-gray-600">{event.organizer?.description || 'No description'}</p>
+                      <p className="text-gray-800">{event.organizer?.description || 'No description'}</p>
                     </div>
                   </div>
                   <div className="space-y-2">
