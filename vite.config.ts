@@ -2,11 +2,13 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'url';
 import type { ProxyOptions } from 'vite';
+import tailwindcss from 'tailwindcss';
+import autoprefixer from 'autoprefixer';
 
 // Load environment variables
 const backendPort = process.env.BACKEND_PORT || '5001';
 const apiVersion = process.env.API_VERSION || 'v1';
-const frontendPort = parseInt(process.env.FRONTEND_PORT || '3005', 10);
+const frontendPort = parseInt(process.env.FRONTEND_PORT || '3000', 10);
 
 // Proxy configuration
 const proxyConfig: Record<string, string | ProxyOptions> = {
@@ -33,6 +35,16 @@ const proxyConfig: Record<string, string | ProxyOptions> = {
 export default defineConfig({
   base: '/',
   publicDir: 'public',
+  
+  // CSS configuration
+  css: {
+    postcss: {
+      plugins: [
+        tailwindcss(),
+        autoprefixer(),
+      ],
+    },
+  },
   
   // Make environment variables available to the client
   define: {

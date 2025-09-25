@@ -445,6 +445,12 @@ const sampleEvents = [
   }
 ];
 
+// Add contractEventId to each event
+const eventsWithIds = sampleEvents.map((event, index) => ({
+  ...event,
+  contractEventId: index + 1,  // Add a unique ID for each event
+}));
+
 // Connect to MongoDB
 const connectDB = async () => {
   try {
@@ -486,8 +492,12 @@ const seedEvents = async () => {
       contractEventId: Math.floor(Math.random() * 1000000) // Generate a random ID for the contract
     }));
     
-    // Insert events into the database
-    const createdEvents = await Event.insertMany(eventsWithOrganizer);
+    // Clear existing events to prevent duplicates
+    await Event.deleteMany({});
+    console.log('Cleared existing events');
+    
+    // Insert events into the database with ordered: false to prevent duplicates
+    const createdEvents = await Event.insertMany(eventsWithOrganizer, { ordered: false });
     
     console.log(`Successfully created ${createdEvents.length} events`);
     console.log('Sample events have been added to the database');

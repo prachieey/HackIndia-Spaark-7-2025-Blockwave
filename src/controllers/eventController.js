@@ -24,27 +24,38 @@ const getAllEvents = catchAsync(async (req, res, next) => {
     console.log('Database connection state:', db.readyState);
     console.log('Database name:', db.name);
     
-    // Execute query with APIFeatures
-    const features = new APIFeatures(Event.find(), req.query)
-      .filter()
-      .sort()
-      .limitFields()
-      .paginate();
-    
-    // Get the query with all features applied
-    let query = features.query;
-    
-    // Execute the query
-    const events = await query.lean();
-    
-    // Get total count for pagination
-    const total = await Event.countDocuments(features.query.getFilter());
+    // Directly fetch all events without using APIFeatures
+    const events = await Event.find({}).lean();
+    const total = events.length;
     
     console.log(`Found ${events.length} events out of ${total} total`);
 
     // Log first event (if any) to verify data structure
     if (events.length > 0) {
       console.log('Sample event:', JSON.stringify(events[0], null, 2));
+    } else {
+      console.log('No events found in the database');
+      // Check if the events collection exists and has documents
+      const count = await Event.countDocuments();
+      console.log(`Total events in database: ${count}`);
+      
+      // If no events found, try to seed the database
+      if (count === 0) {
+        console.log('Attempting to seed the database with sample events...');
+        try {
+          const { exec } = await import('child_process');
+          exec('node scripts/seedEvents.js', (error, stdout, stderr) => {
+            if (error) {
+              console.error('Error seeding database:', error);
+              return;
+            }
+            console.log('Database seeded successfully');
+            console.log(stdout);
+          });
+        } catch (error) {
+          console.error('Error running seed script:', error);
+        }
+      }
     }
 
     // Send response

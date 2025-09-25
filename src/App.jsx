@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import './utils/testFirebaseConfig'; // Test Firebase configuration
 import { Routes, Route, useLocation, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Toaster, toast } from 'react-hot-toast';

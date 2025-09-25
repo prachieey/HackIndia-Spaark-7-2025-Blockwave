@@ -15,6 +15,13 @@ const handleApiResponse = (response) => {
     return [];
   }
 
+  // If response has a data.events array, return it (new API format)
+  if (response.data && response.data.events && Array.isArray(response.data.events)) {
+    console.log('Response has data.events array, returning events');
+    console.groupEnd();
+    return response.data.events;
+  }
+
   // If response is an array, return it
   if (Array.isArray(response)) {
     console.log('Response is an array, returning as is');
@@ -70,29 +77,87 @@ const EVENT_IMAGES = {
 const processEvents = (events, filters = {}) => {
   const now = new Date();
   
+  // Ensure events is an array
+  if (!Array.isArray(events)) {
+    console.warn('processEvents called with non-array input:', events);
+    return [];
+  }
+  
   return events
+    .filter(event => event) // Filter out any null/undefined events
     .map(event => {
-      // Use event.date as fallback for startDate
-      const startDate = new Date(event.startDate || event.date);
-      // If endDate is not provided, set it to 2 hours after startDate
-      const endDate = event.endDate ? new Date(event.endDate) : new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
-      
-      const isUpcoming = startDate > now;
-      const isPast = endDate ? endDate < now : startDate < now;
-      
-      // Get a unique image for this event based on its title
-      const imageCategory = EVENT_IMAGES[event.title] || 'event';
-      const bannerImage = `https://source.unsplash.com/random/800x400/?${imageCategory}&sig=${event._id || Math.random().toString(36).substring(7)}`;
-      
-      return {
-        ...event,
-        startDate,
-        endDate,
-        isUpcoming,
-        isPast,
-        bannerImage: event.bannerImage || bannerImage
-      };
+      try {
+        // Handle different event structures
+        const eventData = event.data || event;
+        
+        // Extract basic event info
+        const title = eventData.title || 'Untitled Event';
+        const eventId = eventData._id || eventData.id || Math.random().toString(36).substring(7);
+        
+        // Parse dates with proper error handling
+        let startDate, endDate;
+        try {
+          startDate = eventData.startDate ? new Date(eventData.startDate) : null;
+          endDate = eventData.endDate ? new Date(eventData.endDate) : null;
+          
+          // If startDate is invalid, use current date as fallback
+          if (!startDate || isNaN(startDate.getTime())) {
+            console.warn(`Invalid startDate for event ${eventId}, using current date`);
+            startDate = new Date();
+          }
+          
+          // If endDate is not provided or invalid, set it to 2 hours after startDate
+          if (!endDate || isNaN(endDate.getTime())) {
+            endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
+          }
+        } catch (dateError) {
+          console.error('Error parsing dates:', dateError);
+          startDate = new Date();
+          endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
+        }
+        
+        const isUpcoming = startDate > now;
+        const isPast = endDate < now;
+        
+        // Get a unique image for this event based on its title
+        const imageCategory = EVENT_IMAGES[title] || 'event';
+        const bannerImage = eventData.bannerImage || 
+                          eventData.images?.[0] || 
+                          `https://source.unsplash.com/random/800x400/?${imageCategory}&sig=${eventId}`;
+        
+        // Construct the processed event object
+        return {
+          id: eventId,
+          _id: eventId,
+          title,
+          description: eventData.description || '',
+          summary: eventData.summary || '',
+          category: eventData.category || 'general',
+          bannerImage,
+          gallery: eventData.gallery || eventData.images || [],
+          venue: eventData.venue || {},
+          startDate,
+          endDate,
+          timezone: eventData.timezone || 'UTC',
+          ticketTypes: eventData.ticketTypes || [],
+          status: eventData.status || 'upcoming',
+          tags: eventData.tags || [],
+          ratingsAverage: eventData.ratingsAverage || 0,
+          ratingsQuantity: eventData.ratingsQuantity || 0,
+          views: eventData.views || 0,
+          favorites: eventData.favorites || [],
+          createdAt: eventData.createdAt || new Date().toISOString(),
+          updatedAt: eventData.updatedAt || new Date().toISOString(),
+          organizer: eventData.organizer || {},
+          isUpcoming,
+          isPast
+        };
+      } catch (error) {
+        console.error('Error processing event:', error);
+        return null; // Will be filtered out
+      }
     })
+    .filter(Boolean) // Remove any null events from the array
     .sort((a, b) => {
       // Sort by: 1) Upcoming first, then past
       //          2) Soonest first for upcoming, most recent first for past
