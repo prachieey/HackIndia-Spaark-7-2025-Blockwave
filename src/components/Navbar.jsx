@@ -113,8 +113,8 @@ const Navbar = ({ openAuthModal }) => {
   const navItems = [
     { name: 'Home', path: '/' },
     { name: 'Explore', path: '/explore' },
-    { name: 'Events', path: '/events' },
-    { name: 'Tickets', path: '/tickets' },
+    { name: 'Resell', path: '/events' },
+    { name: 'About', path: '/tickets' },
   ];
 
   // Popular cities for location dropdown

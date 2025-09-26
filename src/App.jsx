@@ -212,6 +212,9 @@ function AppContent() {
             <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
             <Route path="/login" element={<LoginRedirect />} />
             
+            {/* Redirects for better UX */}
+            <Route path="/my-tickets" element={<Navigate to="/user/tickets" replace />} />
+            
             {/* Payment Routes */}
             <Route path="/payment" element={
               <ProtectedRoute>

@@ -1,12 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion } from 'framer-motion';
-import { Calendar, Tag, Check, X } from 'lucide-react';
+import { Calendar, Tag, Check, X, RefreshCw } from 'lucide-react';
 import { useEvents } from '../../contexts/EventsContext';
 
 const QRTicket = ({ ticket, onResell, showResellOption = false }) => {
   const { formatPrice, getEventById } = useEvents();
   const event = getEventById(ticket.eventId);
+  const [qrData, setQrData] = useState('');
+  
+  // Generate QR data with timestamp
+  const generateQrData = () => {
+    const timestamp = new Date().getTime();
+    return `${ticket.qrData}|${timestamp}`;
+  };
+
+  // Update QR data every 20 seconds
+  useEffect(() => {
+    // Initial set
+    setQrData(generateQrData());
+    
+    // Set up interval for refreshing QR code
+    const interval = setInterval(() => {
+      setQrData(generateQrData());
+    }, 20000); // 20 seconds
+    
+    // Clean up interval on component unmount
+    return () => clearInterval(interval);
+  }, [ticket.qrData]);
   
   // Format date
   const formatDate = (dateString) => {
@@ -76,21 +97,27 @@ const QRTicket = ({ ticket, onResell, showResellOption = false }) => {
             )}
           </div>
           
-          <div className="flex justify-center items-center bg-white p-4 rounded-lg">
-            <QRCodeSVG 
-              value={ticket.qrData} 
-              size={150}
-              level="H"
-              includeMargin={true}
-              imageSettings={{
-                src: "/vite.svg",
-                x: undefined,
-                y: undefined,
-                height: 24,
-                width: 24,
-                excavate: true,
-              }}
-            />
+          <div className="flex flex-col items-center space-y-2">
+            <div className="relative bg-white p-4 rounded-lg">
+              <QRCodeSVG 
+                value={qrData || ticket.qrData} 
+                size={150}
+                level="H"
+                includeMargin={true}
+                imageSettings={{
+                  src: "/vite.svg",
+                  x: undefined,
+                  y: undefined,
+                  height: 24,
+                  width: 24,
+                  excavate: true,
+                }}
+              />
+              <div className="absolute -top-2 -right-2 bg-tech-blue text-white rounded-full p-1">
+                <RefreshCw className="h-3 w-3" />
+              </div>
+            </div>
+            <p className="text-xs text-holographic-white/50">Auto-refreshes every 20s</p>
           </div>
         </div>
       </div>

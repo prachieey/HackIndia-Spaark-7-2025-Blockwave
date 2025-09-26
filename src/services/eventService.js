@@ -409,11 +409,48 @@ export const eventAPI = {
     }
   },
   
+  // Purchase a ticket for an event
+  purchaseTicket: async (eventId, ticketData = {}) => {
+    if (!eventId) {
+      throw new Error('Event ID is required to purchase a ticket');
+    }
+    
+    try {
+      console.log(`Purchasing ticket for event ${eventId} with data:`, ticketData);
+      const response = await apiRequest(`/events/${eventId}/tickets`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(ticketData)
+      });
+      
+      console.log('Ticket purchase response:', response);
+      return response;
+    } catch (error) {
+      console.error(`Error purchasing ticket for event ${eventId}:`, error);
+      
+      // Provide more specific error messages
+      if (error.response) {
+        if (error.response.status === 401) {
+          throw new Error('You must be logged in to purchase tickets');
+        } else if (error.response.status === 400) {
+          throw new Error(error.response.data?.message || 'Invalid ticket data');
+        } else if (error.response.status === 404) {
+          throw new Error('Event not found or tickets are no longer available');
+        }
+      }
+      
+      throw new Error(error.message || 'Failed to purchase ticket. Please try again.');
+    }
+  },
+  
   // Get pending tickets for an event
   getPendingTickets: async (eventId) => {
     if (!eventId) {
       throw new Error('Event ID is required to fetch pending tickets');
     }
+    
     try {
       console.log(`Fetching pending tickets for event ${eventId}`);
       const response = await events.getPendingTickets(eventId);

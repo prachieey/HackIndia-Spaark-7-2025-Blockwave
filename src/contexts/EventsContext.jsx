@@ -360,14 +360,28 @@ export const EventsProvider = ({ children }) => {
       // Ensure we're working with an array
       const ticketsArray = Array.isArray(tickets) ? tickets : [];
       
-      // Update state with the tickets
-      setUserTickets(ticketsArray);
-      return ticketsArray;
+      // Sort tickets by event date (newest first) and then by creation date
+      const sortedTickets = [...ticketsArray].sort((a, b) => {
+        const dateA = new Date(a.event?.date || a.eventDate || 0);
+        const dateB = new Date(b.event?.date || b.eventDate || 0);
+        
+        if (dateA > dateB) return -1;
+        if (dateA < dateB) return 1;
+        
+        // If event dates are the same, sort by creation date
+        const createdA = new Date(a.createdAt || 0);
+        const createdB = new Date(b.createdAt || 0);
+        return createdB - createdA;
+      });
+      
+      // Update state with the sorted tickets
+      setUserTickets(sortedTickets);
+      return sortedTickets;
     } catch (error) {
       console.error('Error in fetchUserTickets:', error);
       setUserTickets([]);
       handleError(error, 'Failed to load your tickets');
-      return [];
+      throw error; // Re-throw to allow components to handle the error
     }
   }, [handleError, user]);
 
@@ -623,35 +637,56 @@ export const EventsProvider = ({ children }) => {
       const response = await eventAPI.purchaseTicket(eventId, { quantity });
       
       // Update the user's tickets list
-      if (response && response.data) {
-        const newTicket = response.data.ticket || response.data;
-        setUserTickets(prevTickets => [...prevTickets, newTicket]);
+      if (response) {
+        // Handle different response formats
+        const newTicket = response.ticket || response.data?.ticket || response.data || response;
+        
+        if (!newTicket) {
+          throw new Error('Invalid ticket data received from server');
+        }
+
+        // Ensure newTicket is an array if multiple tickets were purchased
+        const ticketsToAdd = Array.isArray(newTicket) ? newTicket : [newTicket];
+        
+        // Update userTickets state with the new tickets
+        setUserTickets(prevTickets => [...prevTickets, ...ticketsToAdd]);
         
         // Also update the event's available tickets count
         setEvents(prevEvents => 
           prevEvents.map(event => 
             event._id === eventId 
-              ? { ...event, availableTickets: event.availableTickets - quantity }
+              ? { 
+                  ...event, 
+                  availableTickets: Math.max(0, (event.availableTickets || 0) - quantity) 
+                }
               : event
           )
         );
         
+        // Refresh user tickets to ensure we have the latest data
+        await fetchUserTickets();
+        
         handleSuccess('Ticket purchased successfully!');
-        return newTicket;
+        return ticketsToAdd;
       }
       
-      throw new Error('Failed to purchase ticket');
+      throw new Error('No response received from server');
     } catch (error) {
       console.error('Error purchasing ticket:', error);
       handleError(error, 'Failed to purchase ticket');
       throw error;
     }
-  }, [handleError, handleSuccess]);
+  }, [handleError, handleSuccess, fetchUserTickets]);
 
-  // Format price with 2 decimal places and currency symbol
+  // Format price with Indian Rupee symbol and proper formatting
   const formatPrice = (price) => {
     if (price === 0 || price === '0') return 'Free';
-    return `$${Number(price).toFixed(2)}`;
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0
+    }).format(price);
   };
 
   // Memoize the context value to prevent unnecessary re-renders

@@ -16,17 +16,14 @@ export function createGenericEvent(eventId) {
       city: 'City not specified'
     },
     category: 'other',
-    price: 0,
-    minPrice: 0,
-    maxPrice: 0,
-    hasMultiplePrices: false,
+    price: 4999, // Default price for the event in INR
+    minPrice: 1999,
+    maxPrice: 19999,
+    hasMultiplePrices: true,
     capacity: 100,
     registered: 0,
     isFree: true,
     rating: 0,
-    ticketTypes: [
-      { id: '1', name: 'General Admission', price: 0, quantity: 100, description: 'Standard entry' }
-    ],
     organizer: {
       id: 'sample-organizer',
       name: 'Event Organizer',

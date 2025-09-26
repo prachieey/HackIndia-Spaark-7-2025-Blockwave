@@ -33,7 +33,7 @@ const HomePage = () => {
     console.log('Stored user in localStorage:', storedUser ? JSON.parse(storedUser) : null);
   }, [isAuthenticated, user]);
 
-  // Get featured events (first 3)
+  // Get 3 featured events
   const featuredEvents = events?.slice(0, 3) || [];
   
   // Initialize userTickets state

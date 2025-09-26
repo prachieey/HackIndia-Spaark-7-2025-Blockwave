@@ -6,6 +6,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { EventsProvider } from './contexts/EventsContext';
 import { AuthModalProvider } from './contexts/AuthModalContext';
+import { TooltipProvider } from './components/ui/tooltip';
 import App from './App';
 import './index.css';
 
@@ -17,7 +18,9 @@ createRoot(document.getElementById('root')).render(
           <ThemeProvider>
             <EventsProvider>
               <AuthModalProvider>
-                <App />
+                <TooltipProvider>
+                  <App />
+                </TooltipProvider>
               </AuthModalProvider>
             </EventsProvider>
           </ThemeProvider>
