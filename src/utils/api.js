@@ -4,14 +4,14 @@
 // ============================================================================
 import { jwtDecode } from 'jwt-decode';
 
-const DEFAULT_BACKEND_PORT = '5002';
+const DEFAULT_BACKEND_PORT = '5003';
 const DEFAULT_API_VERSION = 'v1';
 
 // Get the base URL from environment variables or use default
 const getBackendUrl = () => {
   // In development, always use localhost with the backend port
   if (import.meta.env.DEV) {
-    return `http://127.0.0.1:5002`; // Hardcoded to match the backend port
+    return `http://127.0.0.1:5003`; // Hardcoded to match the backend port
   }
   
   // In production, use the Vite environment variable if set

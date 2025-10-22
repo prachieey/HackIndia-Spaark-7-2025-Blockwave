@@ -13,6 +13,7 @@ import './src/models/index.js'; // This will register all models with Mongoose
 import eventRoutes from './src/routes/eventRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import reviewRoutes from './src/routes/reviewRoutes.js';
+import emailRoutes from './src/routes/emailRoutes.js';
 import setupStatic from './setupStatic.js';
 
 // API Routes
@@ -211,9 +212,10 @@ console.log(`\n=== MOUNTING ROUTES ===`);
 console.log('Mounting API routes...');
 
 // Mount all routes with their respective prefixes
-app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/events`, eventRoutes);
+app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/reviews`, reviewRoutes);
+app.use(`${API_PREFIX}/email`, emailRoutes);
 
 // Log all registered routes
 console.log('\n=== REGISTERED ROUTES ===');

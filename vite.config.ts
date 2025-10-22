@@ -57,21 +57,13 @@ export default defineConfig({
     headers: {
       'Content-Security-Policy': [
         "default-src 'self';",
-        // Allow media from Google domains
-        "media-src 'self' blob: data: http: https: *.googleusercontent.com *.googlevideo.com *.googleapis.com *.gstatic.com;",
-        // Other CSP directives...
-        "img-src 'self' data: blob: https: https://*.google.com https://*.google-analytics.com https://*.firebase.com https://*.gstatic.com https://*.google.com/ads/ https://*.doubleclick.net https://www.googletagmanager.com;",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://www.google.com https://www.google-analytics.com https://www.googletagmanager.com https://ssl.google-analytics.com https://tagmanager.google.com https://*.firebase.com https://*.firebaseio.com https://*.googleapis.com;",
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://tagmanager.google.com https://www.gstatic.com;",
-        "connect-src 'self' http: https: ws: wss: http://localhost:* ws://localhost:* wss://localhost:* http://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:* https://*.firebaseio.com wss://*.firebaseio.com https://*.googleapis.com https://*.firebase.com https://*.firebaseinstallations.googleapis.com https://*.firestore.googleapis.com https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://firebase.googleapis.com https://*.firebaseio.com *.googleusercontent.com;",
-        "font-src 'self' data: https: https://fonts.gstatic.com;",
-        "frame-src 'self' https: https://www.google.com https://*.doubleclick.net https://*.google-analytics.com https://www.googletagmanager.com https://*.firebaseapp.com;",
-        "object-src 'none';",
-        "worker-src 'self' blob: https://*.firebaseio.com;",
-        "form-action 'self' https:;",
-        "base-uri 'self';",
-        "frame-ancestors 'self' https:;",
-        "upgrade-insecure-requests;"
+        "connect-src 'self' https://api.emailjs.com http://localhost:* https://localhost:* ws://localhost:* wss://localhost:* http://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:*;",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval';",
+        "style-src 'self' 'unsafe-inline';",
+        "img-src 'self' data: blob: https:;",
+        "font-src 'self' data:;",
+        "frame-src 'self';",
+        "object-src 'none';"
       ].join(' ')
     },
     proxy: proxyConfig,

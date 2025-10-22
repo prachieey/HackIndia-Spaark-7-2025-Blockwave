@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useOutletContext } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { QrCode, Shield, Repeat, CreditCard, ChevronRight, Star } from 'lucide-react';
+import { motion, useScroll, useTransform } from 'framer-motion';
+import { QrCode, Shield, Repeat, CreditCard, ChevronRight, Star, Send, Lock, Calendar, MapPin, Instagram } from 'lucide-react';
 import { useEvents } from '../contexts/EventsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthModal } from '../contexts/AuthModalContext';
 import EventCard from '../components/events/EventCard';
 import QRTicket from '../components/tickets/QRTicket';
+import SocialMediaSection from '../components/social/SocialMediaSection';
 import TestimonialsSection from '../components/testimonials/TestimonialsSection';
 import FeaturesSection from '../components/features/FeaturesSection';
+import NewsletterSignup from '../components/engagement/NewsletterSignup';
 
 const HomePage = () => {
   const { openAuthModal } = useAuthModal();
@@ -33,8 +35,39 @@ const HomePage = () => {
     console.log('Stored user in localStorage:', storedUser ? JSON.parse(storedUser) : null);
   }, [isAuthenticated, user]);
 
-  // Get 3 featured events
-  const featuredEvents = events?.slice(0, 3) || [];
+  // Mock events data in case the API doesn't return any events
+  const mockEvents = [
+    {
+      id: 'mock-1',
+      name: 'Blockchain Hackathon 2025',
+      description: 'Join us for a 48-hour hackathon focused on blockchain innovation and decentralized applications.',
+      date: '2025-11-15T10:00:00',
+      location: 'Virtual',
+      category: 'Blockchain',
+      image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80'
+    },
+    {
+      id: 'mock-2',
+      name: 'Web3 Conference',
+      description: 'Learn about the latest trends in Web3, DeFi, and the future of the decentralized web.',
+      date: '2025-12-05T09:30:00',
+      location: 'Bangalore, India',
+      category: 'Web3',
+      image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80'
+    },
+    {
+      id: 'mock-3',
+      name: 'NFT Art Exhibition',
+      description: 'Experience the intersection of art and blockchain with our exclusive NFT art exhibition.',
+      date: '2025-11-22T18:00:00',
+      location: 'Mumbai, India',
+      category: 'NFT',
+      image: 'https://images.unsplash.com/photo-1626785774573-4b799315345d?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80'
+    }
+  ];
+
+  // Get 3 featured events or use mock data if none available
+  const featuredEvents = events?.length > 0 ? events.slice(0, 3) : mockEvents;
   
   // Initialize userTickets state
   const [userTickets, setUserTickets] = useState([]);
@@ -118,7 +151,6 @@ const HomePage = () => {
 
   return (
     <>
-      {/* Hero Section */}
       {/* Hero Section */}
 <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
   {/* Background Video */}
@@ -270,72 +302,94 @@ const HomePage = () => {
   </div>
 </section>
 
-
-      {/* Features Section */}
-      <section className="py-20 bg-space-black">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="section-title">Why Choose Scantyx?</h2>
-            <p className="text-holographic-white/70 max-w-2xl mx-auto">
-              Our platform offers unparalleled security and convenience for event organizers and attendees.
-            </p>
+      {/* Featured Events Section */}
+      {featuredEvents.length > 0 && (
+        <section className="py-16 bg-gradient-to-b from-space-black to-deep-purple-900">
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl md:text-4xl font-bold text-holographic-white mb-4">Featured Events</h2>
+              <p className="text-holographic-white/70 max-w-2xl mx-auto">Discover our handpicked selection of upcoming events</p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {featuredEvents.map((event) => (
+                <motion.div
+                  key={event.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5 }}
+                  className="bg-gradient-to-br from-deep-purple-900/50 to-space-black/50 rounded-2xl overflow-hidden border border-white/10 backdrop-blur-sm hover:shadow-2xl hover:shadow-tech-blue/20 transition-all duration-300"
+                >
+                  <div className="relative h-48 overflow-hidden">
+                    <img 
+                      src={event.image || '/images/event-placeholder.jpg'} 
+                      alt={event.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                    <div className="absolute bottom-0 left-0 p-4 w-full">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="inline-block px-3 py-1 text-xs font-semibold bg-tech-blue text-white rounded-full mb-2">
+                            {event.category || 'Blockchain'}
+                          </span>
+                          <h3 className="text-xl font-bold text-holographic-white">{event.name}</h3>
+                        </div>
+                        <a 
+                          href="https://www.instagram.com/scantyx" 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center text-white hover:text-tech-blue transition-colors bg-black/50 rounded-full p-2 backdrop-blur-sm"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Instagram size={20} className="mr-1" />
+                          <span className="text-sm font-medium">@ScantyX</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-2 text-sm text-holographic-white/70">
+                        <Calendar size={16} />
+                        <span>{new Date(event.date).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center space-x-2 text-sm text-holographic-white/70">
+                        <MapPin size={16} />
+                        <span>{event.location || 'Online'}</span>
+                      </div>
+                    </div>
+                    
+                    <p className="text-holographic-white/80 text-sm mb-6 line-clamp-2">
+                      {event.description || 'Join us for an exciting event with industry leaders and networking opportunities.'}
+                    </p>
+                    
+                    <Link 
+                      to={`/events/${event.id}`}
+                      className="inline-flex items-center text-tech-blue hover:text-tech-blue/80 font-medium text-sm group"
+                    >
+                      View Details
+                      <ChevronRight size={16} className="ml-1 group-hover:translate-x-1 transition-transform" />
+                    </Link>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+            
+            <div className="text-center mt-12">
+              <Link 
+                to="/explore"
+                className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-tech-blue to-indigo-600 text-white font-medium rounded-full hover:opacity-90 transition-all duration-300 shadow-lg hover:shadow-tech-blue/30"
+              >
+                View All Events
+                <ChevronRight size={18} className="ml-2" />
+              </Link>
+            </div>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <motion.div
-              whileHover={{ y: -10 }}
-              className="card p-6 text-center"
-            >
-              <div className="flex justify-center mb-4">
-                <QrCode className="h-16 w-16 text-deep-purple" />
-              </div>
-              <h3 className="text-xl font-bold text-holographic-white mb-2">Dynamic QR Codes</h3>
-              <p className="text-holographic-white/70">
-                Unique, encrypted QR codes that change periodically to prevent screenshot sharing.
-              </p>
-            </motion.div>
-            
-            <motion.div
-              whileHover={{ y: -10 }}
-              className="card p-6 text-center"
-            >
-              <div className="flex justify-center mb-4">
-                <Shield className="h-16 w-16 text-deep-purple" />
-              </div>
-              <h3 className="text-xl font-bold text-holographic-white mb-2">Blockchain Security</h3>
-              <p className="text-holographic-white/70">
-                Immutable record of ticket ownership and transfers, eliminating counterfeits.
-              </p>
-            </motion.div>
-            
-            <motion.div
-              whileHover={{ y: -10 }}
-              className="card p-6 text-center"
-            >
-              <div className="flex justify-center mb-4">
-                <Repeat className="h-16 w-16 text-deep-purple" />
-              </div>
-              <h3 className="text-xl font-bold text-holographic-white mb-2">Secure Reselling</h3>
-              <p className="text-holographic-white/70">
-                Safely resell tickets with price caps to prevent scalping and ensure fair access.
-              </p>
-            </motion.div>
-            
-            <motion.div
-              whileHover={{ y: -10 }}
-              className="card p-6 text-center"
-            >
-              <div className="flex justify-center mb-4">
-                <CreditCard className="h-16 w-16 text-deep-purple" />
-              </div>
-              <h3 className="text-xl font-bold text-holographic-white mb-2">INR Payments</h3>
-              <p className="text-holographic-white/70">
-                Seamless transactions in Indian Rupees with transparent pricing and no hidden fees.
-              </p>
-            </motion.div>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Features Section */}
       <FeaturesSection />
@@ -364,6 +418,51 @@ const HomePage = () => {
           </div>
         </div>
       </section>
+      
+      {/* Social Media Reels Section */}
+      {/* Animated Divider */}
+      <div className="relative h-24 overflow-hidden bg-gradient-to-b from-deep-purple-900 to-black">
+        <motion.div 
+          initial={{ opacity: 0, y: 50 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="absolute inset-0 flex items-center justify-center"
+        >
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-tech-blue/30 to-transparent h-px w-full -top-1/2"></div>
+            <motion.div 
+              animate={{ 
+                scale: [1, 1.2, 1],
+                opacity: [0.6, 1, 0.6],
+              }}
+              transition={{ 
+                duration: 3, 
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
+              className="w-3 h-3 mx-auto rounded-full bg-tech-blue"
+            />
+          </div>
+        </motion.div>
+      </div>
+      
+      {/* Reels Section with Scroll Animation */}
+      <motion.div
+        initial={{ opacity: 0, y: 50 }}
+        whileInView={{ 
+          opacity: 1, 
+          y: 0,
+          transition: { 
+            duration: 0.8, 
+            ease: "easeOut",
+            delay: 0.2
+          } 
+        }}
+        viewport={{ once: true, margin: "-100px" }}
+      >
+        <SocialMediaSection />
+      </motion.div>
       
       {/* Testimonials Section */}
       <TestimonialsSection />
@@ -409,6 +508,9 @@ const HomePage = () => {
           </div>
         </div>
       </section>
+
+      {/* Newsletter Signup Section */}
+      <NewsletterSignup />
 
       {/* Resell Modal */}
       {showResellModal && (
