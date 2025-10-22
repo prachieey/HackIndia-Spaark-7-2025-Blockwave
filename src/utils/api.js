@@ -4,27 +4,32 @@
 // ============================================================================
 import { jwtDecode } from 'jwt-decode';
 
-const DEFAULT_BACKEND_PORT = '5001';
+const DEFAULT_BACKEND_PORT = '5002';
 const DEFAULT_API_VERSION = 'v1';
 
 // Get the base URL from environment variables or use default
 const getBackendUrl = () => {
-  // Use Vite environment variable if set
+  // In development, always use localhost with the backend port
+  if (import.meta.env.DEV) {
+    return `http://127.0.0.1:5002`; // Hardcoded to match the backend port
+  }
+  
+  // In production, use the Vite environment variable if set
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
   
-  // Default to current host with default port
+  // Fallback to current host with default port
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
   const port = DEFAULT_BACKEND_PORT;
   
-  // If we're on the same host as the frontend, use the default port
+  // For local development, use the backend port directly
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return `http://localhost:${port}`;
+    return `http://127.0.0.1:${port}`; // Use 127.0.0.1 to avoid IPv6 issues
   }
   
-  // For production, assume API is on the same host
+  // For production, assume API is on the same host as the frontend
   return `${protocol}//${hostname}${port ? ':' + port : ''}`;
 };
 
@@ -36,16 +41,19 @@ const getApiBaseUrl = () => {
 
 // Get versioned API URL
 const getVersionedApiUrl = () => {
-  // For development, use the direct backend URL
+  // In development, use the full URL with /api/v1
   if (import.meta.env.DEV) {
-    // Ensure we're using the correct port (5001) for the backend
-    return 'http://localhost:5001';
+    const baseUrl = getBackendUrl();
+    return `${baseUrl}/api/v1`;
   }
   
   // For production, use the configured backend URL
   const baseUrl = getBackendUrl();
-  // Remove any trailing slashes and /api/v1 if present
-  return baseUrl.replace(/\/api\/v\d+$/, '').replace(/\/+$/, '');
+  // Ensure the URL ends with /api/v1
+  const versionedUrl = baseUrl.endsWith('/api/v1') ? baseUrl : `${baseUrl.replace(/\/+$/, '')}/api/v1`;
+  
+  console.log('Using API URL:', versionedUrl);
+  return versionedUrl;
 };
 
 // Helper to build API URLs
@@ -216,7 +224,7 @@ async function apiRequest(endpoint, options = {}) {
   
   // Build the full URL using our helper
   const fullUrl = buildApiUrl(endpoint);
-  console.log(`API Request: ${options.method || 'GET'} ${fullUrl}`);
+  console.log(`API Request: ${options.method || 'GET'} ${fullUrl}`, { isPublic, hasToken: !!token });
   
   // Ensure headers exist and set defaults
   const headers = new Headers({
@@ -225,11 +233,14 @@ async function apiRequest(endpoint, options = {}) {
     'Cache-Control': 'no-cache',
     'Pragma': 'no-cache',
     'X-Requested-With': 'XMLHttpRequest',
+    // Add CORS headers
+    'Access-Control-Allow-Origin': 'http://localhost:3000',
+    'Access-Control-Allow-Credentials': 'true',
     ...(options.headers || {})
   });
 
   // Add authorization token if available and not a public endpoint
-  if (!isPublic) {
+  if (!isPublic || token) {
     // Get the token from localStorage if not provided
     const authToken = token || localStorage.getItem('token');
     
@@ -238,7 +249,7 @@ async function apiRequest(endpoint, options = {}) {
       const bearerToken = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
       headers.set('Authorization', bearerToken);
       console.log('Added Authorization header to request');
-    } else {
+    } else if (!isPublic) {
       console.warn('No authentication token found for protected endpoint:', endpoint);
       
       // For protected routes, redirect to login
@@ -353,17 +364,43 @@ async function apiRequest(endpoint, options = {}) {
             headers.set('Authorization', `Bearer ${newToken}`);
             
             // Retry the original request
-            const retryResponse = await fetch(fullUrl, {
-              ...fetchOptions,
-              headers,
-              signal: controller.signal
-            });
-            
-            // Process the retry response
-            const retryData = await retryResponse.json();
-            isRefreshing = false;
-            onTokenRefreshed(newToken);
-            return retryData;
+            try {
+              const fetchOptions = {
+                method: options.method || 'GET',
+                headers,
+                body,
+                signal: controller.signal,
+                // Always include credentials for CORS requests
+                credentials: 'include',
+                // Add CORS mode
+                mode: 'cors',
+                // Add cache control
+                cache: 'no-store',
+                // Add referrer policy
+                referrerPolicy: 'no-referrer-when-downgrade',
+                // Keep the existing credentials option if provided
+                ...(options.credentials ? { credentials: options.credentials } : {})
+              };
+              
+              console.log('Fetch options:', {
+                ...fetchOptions,
+                headers: Object.fromEntries(headers.entries())
+              });
+              
+              const response = await fetch(fullUrl, fetchOptions);
+              
+              // Log response details for debugging
+              console.log('Response status:', response.status, response.statusText);
+              console.log('Response headers:', Object.fromEntries(response.headers.entries()));        
+              // Process the retry response
+              const retryData = await response.json();
+              isRefreshing = false;
+              onTokenRefreshed(newToken);
+              return retryData;
+            } catch (error) {
+              console.error('Error retrying request:', error);
+              throw error;
+            }
           } else {
             // If refresh failed, clear auth and redirect to login
             cleanAuthData();
@@ -466,48 +503,43 @@ export const auth = {
       
       // Basic email format validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
+      if (!emailRegex.test(email.trim())) {
         throw new Error('Please enter a valid email address');
       }
-    
+      
       // Use the correct backend URL for login with API version
-      const loginUrl = `${getVersionedApiUrl()}/api/v1/auth/login`;
-      console.log('Using login URL:', loginUrl);
-      console.log('Login request:', { 
-        loginUrl, 
+      const baseUrl = getVersionedApiUrl();
+      const loginUrl = `${baseUrl}/auth/login`;
+      
+      console.log('Login request details:', { 
+        baseUrl,
+        endpoint: '/auth/login',
         email: email.substring(0, 3) + '...', // Log partial email for security
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        isDev: import.meta.env.DEV,
+        env: import.meta.env.MODE
       });
       
       // Clear any existing auth data before login
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       
-      // Make the login request with enhanced error handling
-      console.log('Sending login request to:', loginUrl);
-      
-      // Prepare request options
+      // Prepare request options with CORS settings
       const requestOptions = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'Access-Control-Allow-Origin': '*',
         },
-        body: JSON.stringify({ 
-          email: email.trim(), 
-          password: password.trim(),
-          rememberMe
-        })
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password: password,
+          rememberMe: rememberMe
+        }),
+        mode: 'cors', // Enable CORS mode
+        credentials: 'include', // Important for cookies/sessions
       };
-      
-      console.log('Request options:', {
-        ...requestOptions,
-        body: { 
-          email: email.trim(),
-          password: '•••••••', // Don't log actual password
-          rememberMe 
-        }
-      });
       
       console.log('Request options:', {
         ...requestOptions,
@@ -573,25 +605,33 @@ export const auth = {
       
       // Process successful login response
       try {
+        console.log('Processing login response data:', data);
+        
         // The API might return data in different formats:
         // 1. { token, user }
         // 2. { data: { token, user } }
         // 3. { data: { token }, user }
+        // 4. { accessToken, user } (common with JWT)
         let token, userData;
         
+        // Check for token in various possible locations
         if (data.token) {
           // Format 1: { token, user }
           token = data.token;
           userData = data.user;
+        } else if (data.accessToken) {
+          // Format with accessToken
+          token = data.accessToken;
+          userData = data.user || data.data?.user;
         } else if (data.data) {
           // Format 2 or 3
-          token = data.data.token || data.token;
+          token = data.data.token || data.data.accessToken;
           userData = data.data.user || data.user;
         }
         
         // Verify we have a token
         if (!token) {
-          console.error('No token received in login response:', data);
+          console.error('No token received in login response. Full response:', data);
           throw new Error('Authentication failed: No token received');
         }
         
@@ -599,12 +639,41 @@ export const auth = {
         localStorage.setItem('token', token);
         console.log('Token stored in localStorage');
         
+        // If user data is not in the expected location, try to extract it
+        if (!userData && data.data) {
+          userData = data.data.user || data.data;
+        }
+        
         // Store user data if available
         if (userData) {
+          // Ensure user data has required fields
+          if (!userData._id && userData.id) {
+            userData._id = userData.id;
+          }
           localStorage.setItem('user', JSON.stringify(userData));
-          console.log('User data stored in localStorage');
+          console.log('User data stored in localStorage:', {
+            id: userData._id,
+            email: userData.email,
+            role: userData.role
+          });
         } else {
-          console.warn('No user data received in login response');
+          console.warn('No user data received in login response. Full response:', data);
+          // If no user data, try to get it from the token or fetch it
+          try {
+            const decoded = jwtDecode(token);
+            if (decoded) {
+              userData = {
+                _id: decoded.userId || decoded.sub || decoded.id,
+                email: decoded.email,
+                role: decoded.role || 'user',
+                ...decoded
+              };
+              localStorage.setItem('user', JSON.stringify(userData));
+              console.log('Extracted user data from token:', userData);
+            }
+          } catch (decodeError) {
+            console.error('Failed to decode token:', decodeError);
+          }
         }
         
         // Log successful login
@@ -618,12 +687,15 @@ export const auth = {
         });
         
         // Return consistent response format
-        return {
+        const result = {
           success: true,
           token: token,
           user: userData,
-          data: data.data || data
+          data: data
         };
+        
+        console.log('Login result:', result);
+        return result;
         
       } catch (processError) {
         console.error('Error processing login response:', processError);

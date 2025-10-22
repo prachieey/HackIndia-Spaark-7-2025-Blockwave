@@ -16,12 +16,12 @@ const UserTicketsPage = () => {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   
-  const [activeTab, setActiveTab] = useState('regular');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('regular'); // 'regular' or 'blockchain'
 
-  // Mock tickets data for testing
+  // Mock tickets data for testing (prices in INR)
   const mockTickets = [
     {
       _id: 'mock1',
@@ -29,15 +29,16 @@ const UserTicketsPage = () => {
       eventId: 'event1',
       eventTitle: 'Tech Conference 2025',
       type: 'VIP',
-      price: 14999.00,
+      price: 7499, // ₹7,499
       purchaseDate: new Date().toISOString(),
       isUsed: false,
       qrData: 'mock-ticket-1',
       event: {
         title: 'Tech Conference 2025',
         date: '2025-10-15T09:00:00.000Z',
-        location: 'Convention Center, New York',
-        image: 'https://source.unsplash.com/random/800x600/?conference'
+        location: 'Convention Center, Mumbai',
+        image: 'https://source.unsplash.com/random/800x600/?conference',
+        currency: 'INR'
       }
     },
     {
@@ -46,69 +47,58 @@ const UserTicketsPage = () => {
       eventId: 'event2',
       eventTitle: 'Summer Music Festival',
       type: 'General Admission',
-      price: 4999.00,
+      price: 2499, // ₹2,499
       purchaseDate: new Date().toISOString(),
       isUsed: false,
       qrData: 'mock-ticket-2',
       event: {
         title: 'Summer Music Festival',
         date: '2025-07-20T12:00:00.000Z',
-        location: 'Central Park, New York',
-        image: 'https://source.unsplash.com/random/800x600/?music-festival'
+        location: 'Lalbagh Botanical Garden, Bangalore',
+        image: 'https://source.unsplash.com/random/800x600/?music-festival',
+        currency: 'INR'
       }
     },
-    // Add more mock tickets as needed
     {
       _id: 'mock3',
       id: 'mock3',
       eventId: 'event3',
-      eventTitle: 'Blockchain Summit',
-      type: 'Early Bird',
-      price: 9999.00,
+      eventTitle: 'Blockchain Workshop',
+      type: 'Workshop Pass',
+      price: 4999, // ₹4,999
       purchaseDate: new Date().toISOString(),
       isUsed: false,
       qrData: 'mock-ticket-3',
       event: {
         title: 'Blockchain Summit 2025',
-        date: '2025-09-30T10:00:00.000Z',
-        location: 'Tech Hub, San Francisco',
-        image: 'https://source.unsplash.com/random/800x600/?blockchain'
+        date: '2025-11-10T10:00:00.000Z',
+        location: 'Hyderabad International Convention Center',
+        image: 'https://source.unsplash.com/random/800x600/?blockchain',
+        currency: 'INR'
       }
     },
     {
       _id: 'mock4',
       id: 'mock4',
       eventId: 'event4',
-      eventTitle: 'AI & Machine Learning Expo',
-      type: 'Standard',
-      price: 12999.00,
-      purchaseDate: new Date().toISOString(),
-      isUsed: true,
-      qrData: 'mock-ticket-4',
-      event: {
-        title: 'AI & Machine Learning Expo',
-        date: '2025-11-15T09:30:00.000Z',
-        location: 'Convention Center, Boston',
-        image: 'https://source.unsplash.com/random/800x600/?ai'
-      }
-    },
-    {
-      _id: 'mock5',
-      id: 'mock5',
-      eventId: 'event5',
-      eventTitle: 'Startup Pitch Competition',
-      type: 'Investor Pass',
-      price: 24999.00,
+      eventTitle: 'Startup Pitch Competition 2025',
+      type: 'Early Bird',
+      price: 1499, // ₹1,499
       purchaseDate: new Date().toISOString(),
       isUsed: false,
       isForSale: true,
-      resalePrice: 19999.00,
-      qrData: 'mock-ticket-5',
+      resalePrice: 1999, // ₹1,999
+      qrData: 'mock-ticket-4',
       event: {
         title: 'Startup Pitch Competition 2025',
         date: '2025-12-05T13:00:00.000Z',
-        location: 'Innovation Center, Austin',
-        image: 'https://source.unsplash.com/random/800x600/?startup'
+        location: 'Taj Lands End, Mumbai',
+        description: 'Annual startup pitch competition with top investors',
+        image: 'https://source.unsplash.com/random/800x600/?startup',
+        category: 'Business',
+        availableTickets: 150,
+        totalTickets: 500,
+        currency: 'INR'
       }
     }
   ];

@@ -40,7 +40,7 @@ const ResetPasswordPage = () => {
       setLoading(true);
       setError('');
       
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'}/v1/auth/resetPassword/${token}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/api'}/v1/auth/resetPassword/${token}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

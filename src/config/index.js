@@ -12,8 +12,8 @@ const getEnvVar = (key, defaultValue) => {
   }
 };
 
-const API_BASE_URL = getEnvVar('API_URL', 'http://localhost:54321/api');
-const WS_BASE_URL = getEnvVar('WS_URL', 'ws://localhost:5001');
+const API_BASE_URL = getEnvVar('API_URL', 'http://localhost:5002/api');
+const WS_BASE_URL = getEnvVar('WS_URL', 'ws://localhost:5002');
 
 // Other configuration constants
 const DEFAULT_PAGE_SIZE = 10;

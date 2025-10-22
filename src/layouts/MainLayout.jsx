@@ -4,7 +4,8 @@ import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import AuthModal from '../components/auth/AuthModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Toaster } from 'react-hot-toast';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import PageContainer from '../components/layout/PageContainer';
 
@@ -136,30 +137,23 @@ const MainLayout = () => {
         />
 
         {/* Toast Notifications */}
-        <Toaster
+        <ToastContainer
           position="bottom-center"
-          toastOptions={{
-            style: {
-              background: 'rgba(17, 24, 39, 0.95)',
-              color: '#fff',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              backdropFilter: 'blur(12px)',
-              padding: '12px 20px',
-              borderRadius: '12px',
-              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            },
-            success: {
-              iconTheme: {
-                primary: '#10B981',
-                secondary: '#111827',
-              },
-            },
-            error: {
-              iconTheme: {
-                primary: '#EF4444',
-                secondary: '#111827',
-              },
-            },
+          autoClose={3000}
+          hideProgressBar={false}
+          newestOnTop={false}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme="dark"
+          toastStyle={{
+            background: '#2D3748',
+            color: '#fff',
+            padding: '16px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
           }}
         />
       </div>

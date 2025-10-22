@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import toast from 'react-hot-toast';
+import { toast } from 'react-toastify';
 import { 
   QrCode, 
   Menu, 
@@ -737,18 +737,18 @@ const Navbar = ({ openAuthModal }) => {
                 </div>
               ) : (
                 <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => openAuthModal('login')}
+                  <Link
+                    to="/login"
                     className="px-4 py-2 text-sm font-medium text-gray-200 hover:text-white transition-colors hidden sm:inline-flex"
                   >
                     Log in
-                  </button>
-                  <button
-                    onClick={() => openAuthModal('signup')}
+                  </Link>
+                  <Link
+                    to="/login?mode=signup"
                     className="px-4 py-2 text-sm font-medium bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg hover:opacity-90 transition-opacity"
                   >
                     Sign up
-                  </button>
+                  </Link>
                 </div>
               )}
 

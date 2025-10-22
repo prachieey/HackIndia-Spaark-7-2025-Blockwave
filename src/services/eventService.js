@@ -53,6 +53,34 @@ const handleApiResponse = (response) => {
   return [];
 };
 
+// Create a generic event when the API doesn't return one
+const createGenericEvent = (eventId) => {
+  const now = new Date();
+  const futureDate = new Date();
+  futureDate.setMonth(now.getMonth() + 1); // Set to 1 month from now
+
+  const genericEvent = {
+    _id: eventId,
+    id: eventId,
+    title: `Event ${eventId}`,
+    description: 'Event details not available',
+    startDate: futureDate.toISOString(),
+    endDate: futureDate.toISOString(),
+    location: 'Location not specified',
+    category: 'General',
+    image: 'https://source.unsplash.com/random/800x600/?event',
+    price: 0,
+    capacity: 100,
+    availableTickets: 100,
+    isPublished: true,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString()
+  };
+
+  console.log(`Created generic event for ID: ${eventId}`);
+  return genericEvent;
+};
+
 // Helper function to process events array
 // Map of event titles to unique Unsplash image categories
 const EVENT_IMAGES = {

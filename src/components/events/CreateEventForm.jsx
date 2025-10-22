@@ -100,7 +100,7 @@ export default function CreateEventForm({ onSuccess }) {
       const token = await currentUser.getIdToken();
       console.log('Saving event to backend:', eventData);
       
-      const response = await fetch('http://localhost:5001/api/v1/events', {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/api'}/v1/events`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

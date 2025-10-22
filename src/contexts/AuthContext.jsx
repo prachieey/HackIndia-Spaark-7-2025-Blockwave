@@ -189,14 +189,33 @@ export const AuthProvider = ({ children }) => {
   const login = useCallback(
     async (emailOrCredentials, password, options = {}) => {
       // Handle different parameter patterns
-      let loginEmail, loginPassword, rememberMe;
+      let loginEmail, loginPassword, rememberMe, isFirebaseUser = false;
+      
+      // Handle null/undefined input
+      if (emailOrCredentials === null || emailOrCredentials === undefined) {
+        console.log('No credentials provided, treating as logout');
+        setUser(null);
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        return { success: true, user: null };
+      }
       
       if (typeof emailOrCredentials === 'object') {
         // Handle case where first argument is an object
         const credentials = emailOrCredentials;
-        loginEmail = credentials.email || '';
-        loginPassword = credentials.password || '';
-        rememberMe = credentials.rememberMe || false;
+        
+        // Check if this is a Firebase user object
+        if (credentials.uid && credentials.providerData) {
+          isFirebaseUser = true;
+          loginEmail = credentials.email || '';
+          loginPassword = ''; // No password for Firebase auth
+          rememberMe = true; // Firebase handles persistence
+        } else {
+          // Regular credentials object
+          loginEmail = credentials.email || '';
+          loginPassword = credentials.password || '';
+          rememberMe = credentials.rememberMe || false;
+        }
       } else {
         // Handle case where email and password are separate parameters
         loginEmail = emailOrCredentials || '';
@@ -205,11 +224,17 @@ export const AuthProvider = ({ children }) => {
       }
       
       // Validate inputs
-      if (!loginEmail.trim()) {
-        throw new Error('Email is required');
-      }
-      if (!loginPassword) {
-        throw new Error('Password is required');
+      if (!isFirebaseUser) {
+        if (!loginEmail.trim()) {
+          throw new Error('Email is required');
+        }
+        if (!loginPassword) {
+          throw new Error('Password is required');
+        }
+      } else if (!loginEmail.trim()) {
+        // For Firebase users, we still need at least an email
+        console.error('Firebase user is missing email');
+        throw new Error('Authentication failed: Invalid user data');
       }
       
       setLoading(true);
@@ -220,6 +245,42 @@ export const AuthProvider = ({ children }) => {
       console.log('Remember me:', rememberMe);
 
       try {
+        // Handle Firebase users differently (no API call needed)
+        if (isFirebaseUser) {
+          console.log('Handling Firebase user login...');
+          
+          // Create a user object that matches your application's expected format
+          const firebaseUser = emailOrCredentials;
+          const userData = {
+            _id: firebaseUser.uid,
+            email: firebaseUser.email,
+            name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+            role: 'user', // Default role, adjust as needed
+            ...firebaseUser.providerData[0],
+            emailVerified: firebaseUser.emailVerified,
+            photoURL: firebaseUser.photoURL,
+            providerId: firebaseUser.providerId,
+            uid: firebaseUser.uid
+          };
+          
+          console.log('Firebase user data:', userData);
+          
+          // Update user state and localStorage
+          setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
+          
+          // Show success message
+          toast.success('Logged in successfully!');
+          
+          // Redirect to the intended URL or home
+          const from = location.state?.from?.pathname || '/';
+          console.log('Redirecting after Firebase login to:', from);
+          navigate(from, { replace: true });
+          
+          return { success: true, user: userData };
+        }
+        
+        // Handle regular email/password login
         console.log('Calling auth.login with credentials...', { 
           email: loginEmail, 
           hasPassword: !!loginPassword,
@@ -418,6 +479,11 @@ export const AuthProvider = ({ children }) => {
     }
   }, [navigate, location.state]);
 
+  // Check if the current user is an admin
+  const isAdmin = useMemo(() => {
+    return user?.role === 'admin';
+  }, [user]);
+
   // Value to be provided by the context
   const contextValue = useMemo(() => ({
     user,
@@ -426,8 +492,9 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     isAuthenticated: !!user,
+    isAdmin,
     isInitialized,
-  }), [user, loading, error, login, logout, isInitialized]);
+  }), [user, loading, error, login, logout, isAdmin, isInitialized]);
 
   return (
     <AuthContext.Provider value={contextValue}>

@@ -1,7 +1,25 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
-import { initializeFirestore, getFirestore, CACHE_SIZE_UNLIMITED, enableIndexedDbPersistence } from 'firebase/firestore';
+import { 
+  initializeFirestore, 
+  getFirestore, 
+  CACHE_SIZE_UNLIMITED, 
+  enableIndexedDbPersistence 
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  FacebookAuthProvider, 
+  OAuthProvider, 
+  signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
+  signOut,
+  onAuthStateChanged,
+  setPersistence,
+  browserLocalPersistence
+} from 'firebase/auth';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -30,12 +48,42 @@ console.log('Firebase Config:', {
 let app;
 let analytics;
 let db;
+let auth;
+let googleProvider;
+let facebookProvider;
+let appleProvider;
 
 // Initialize Firebase only if it hasn't been initialized yet
 if (!getApps().length) {
   try {
     app = initializeApp(firebaseConfig);
     console.log('Firebase app initialized successfully');
+    
+    // Initialize Auth
+    try {
+      auth = getAuth(app);
+      
+      // Initialize providers
+      googleProvider = new GoogleAuthProvider();
+      facebookProvider = new FacebookAuthProvider();
+      appleProvider = new OAuthProvider('apple.com');
+      
+      // Configure Google provider
+      googleProvider.addScope('profile');
+      googleProvider.addScope('email');
+      googleProvider.setCustomParameters({
+        prompt: 'select_account',
+        client_id: import.meta.env.VITE_FIREBASE_WEB_CLIENT_ID || ''
+      });
+      
+      facebookProvider.setCustomParameters({
+        'display': 'popup'
+      });
+      
+      console.log('Firebase Auth initialized successfully');
+    } catch (authError) {
+      console.error('Error initializing Firebase Auth:', authError);
+    }
     
     // Initialize Firestore with new cache settings
     try {
@@ -103,4 +151,233 @@ if (!getApps().length) {
 }
 
 // Export the Firebase services
-export { app, db, analytics };
+// Sign in with Google
+export const signInWithGoogle = async () => {
+  try {
+    console.log('Initializing Google sign-in with redirect...');
+    
+    // First, ensure auth is properly initialized
+    if (!auth) {
+      console.error('Auth not initialized');
+      return { user: null, error: 'Authentication service not available' };
+    }
+    
+    try {
+      // Set persistence to LOCAL to maintain auth state across page refreshes
+      await setPersistence(auth, browserLocalPersistence);
+      console.log('Persistence set to LOCAL');
+      
+      // Create Google provider
+      const provider = new GoogleAuthProvider();
+      
+      // Add additional scopes
+      provider.addScope('profile');
+      provider.addScope('email');
+      
+      // Set custom parameters for better user experience
+      provider.setCustomParameters({
+        prompt: 'select_account', // Forces account selection even when only one account is available
+        access_type: 'offline',   // Enables refresh tokens
+      });
+      
+      console.log('Starting Google sign-in redirect...');
+      
+      // Clear any existing auth state to prevent issues
+      await auth.signOut();
+      
+      // Store the current URL to redirect back after sign-in
+      const redirectUrl = window.location.pathname + window.location.search;
+      sessionStorage.setItem('redirectAfterSignIn', redirectUrl);
+      
+      // Initiate the sign-in process with redirect
+      await signInWithRedirect(auth, provider);
+      
+      // This point may not be reached due to the redirect
+      return { user: null, error: null };
+      
+    } catch (error) {
+      console.error('Error during Google sign-in:', {
+        code: error.code,
+        message: error.message,
+        email: error.email,
+        credential: error.credential,
+        fullError: error
+      });
+      
+      let errorMessage = 'Failed to sign in with Google';
+      
+      // Handle specific error cases
+      if (error.code === 'auth/account-exists-with-different-credential') {
+        errorMessage = 'An account already exists with the same email but different sign-in credentials.';
+      } else if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+        errorMessage = 'Sign in was cancelled. Please try again.';
+      } else if (error.code === 'auth/popup-blocked') {
+        errorMessage = 'Popup was blocked by your browser. Please allow popups for this site and try again.';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please check your internet connection and try again.';
+      } else if (error.code) {
+        errorMessage = `Authentication error (${error.code}): ${error.message}`;
+      }
+      
+      // Clean up any partial auth state
+      try {
+        await auth.signOut();
+      } catch (signOutError) {
+        console.error('Error during sign-out after failed login:', signOutError);
+      }
+      
+      return { user: null, error: errorMessage };
+    }
+  } catch (unexpectedError) {
+    console.error('Unexpected error in signInWithGoogle:', unexpectedError);
+    return { 
+      user: null, 
+      error: 'An unexpected error occurred. Please try again later.' 
+    };
+  }
+};
+
+// Handle the OAuth redirect result after user returns from Google sign-in
+export const handleRedirectResult = async () => {
+  try {
+    console.log('Attempting to get redirect result...');
+    
+    // First, ensure auth is properly initialized
+    if (!auth) {
+      console.error('Auth not initialized');
+      return { user: null, error: 'Authentication service not available' };
+    }
+    
+    try {
+      // Add a small delay to ensure all redirect state is properly processed
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Check if we have a redirect result
+      console.log('Calling getRedirectResult...');
+      const result = await getRedirectResult(auth);
+      console.log('Redirect result:', result);
+      
+      // Check if we have a user in the result
+      if (result?.user) {
+        console.log('Google sign-in successful after redirect:', result.user);
+        return { user: result.user, error: null };
+      }
+      
+      // If no result, check if there's a current user
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        console.log('Using current user from auth:', currentUser);
+        return { user: currentUser, error: null };
+      }
+      
+      // Check if we have Google OAuth parameters in the URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const hasOAuthParams = urlParams.has('state') || urlParams.has('code') || urlParams.has('authuser');
+      
+      if (hasOAuthParams) {
+        console.log('OAuth parameters detected but no user found. This might be a race condition.');
+        // Wait a bit longer and try to get the current user again
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const userAfterWait = auth.currentUser;
+        if (userAfterWait) {
+          console.log('Found user after additional wait:', userAfterWait);
+          return { user: userAfterWait, error: null };
+        }
+      }
+      
+      // No redirect result found and no current user
+      console.log('No redirect result and no current user found');
+      return { user: null, error: 'No authentication result found. Please try signing in again.' };
+      
+    } catch (error) {
+      console.error('Error in handleRedirectResult:', {
+        code: error.code,
+        message: error.message,
+        email: error.email,
+        credential: error.credential
+      });
+      
+      // Handle specific error cases
+      if (error.code === 'auth/account-exists-with-different-credential') {
+        const errorMessage = 'An account already exists with the same email but different sign-in credentials.';
+        return { user: null, error: errorMessage };
+      } 
+      if (error.code === 'auth/popup-closed-by-user') {
+        const errorMessage = 'Sign in was cancelled. Please try again.';
+        return { user: null, error: errorMessage };
+      } 
+      if (error.code === 'auth/network-request-failed') {
+        const errorMessage = 'Network error. Please check your internet connection and try again.';
+        return { user: null, error: errorMessage };
+      }
+      
+      // For other errors, include the error code in the message
+      const errorMessage = error.code 
+        ? `Authentication error (${error.code}): ${error.message}`
+        : `Authentication error: ${error.message}`;
+        
+      return { user: null, error: errorMessage };
+    }
+  } catch (error) {
+    console.error('Unexpected error in handleRedirectResult:', {
+      code: error.code,
+      message: error.message,
+      email: error.email,
+      credential: error.credential,
+      fullError: error
+    });
+    
+    const errorMessage = error.code 
+      ? `Unexpected error (${error.code}): ${error.message}`
+      : 'An unexpected error occurred during authentication';
+    
+    return { user: null, error: errorMessage };
+  }
+};
+
+export const signInWithFacebook = async () => {
+  try {
+    const result = await signInWithPopup(auth, facebookProvider);
+    return { user: result.user, error: null };
+  } catch (error) {
+    return { user: null, error: error.message };
+  }
+};
+
+export const signInWithApple = async () => {
+  try {
+    const result = await signInWithPopup(auth, appleProvider);
+    return { user: result.user, error: null };
+  } catch (error) {
+    return { user: null, error: error.message };
+  }
+};
+
+export const signOutUser = async () => {
+  try {
+    await signOut(auth);
+    return { success: true, error: null };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+export const getCurrentUser = () => {
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe();
+      resolve(user);
+    });
+  });
+};
+
+export { 
+  app, 
+  analytics, 
+  db, 
+  auth, 
+  googleProvider, 
+  facebookProvider, 
+  appleProvider,
+  onAuthStateChanged
+};

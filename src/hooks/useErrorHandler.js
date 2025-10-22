@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { showError, showSuccess } from '../components/common/CustomToast';
-import { handleApiError, createErrorHandler } from '../utils/errorHandler';
+import { handleApiError } from '../utils/errorHandler';
 
 /**
  * Custom hook for handling errors in a consistent way

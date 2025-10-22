@@ -13,6 +13,7 @@ import './src/models/index.js'; // This will register all models with Mongoose
 import eventRoutes from './src/routes/eventRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import reviewRoutes from './src/routes/reviewRoutes.js';
+import setupStatic from './setupStatic.js';
 
 // API Routes
 const API_PREFIX = '/api/v1';
@@ -23,7 +24,7 @@ const __dirname = path.dirname(__filename);
 
 // Initialize Express app
 const app = express();
-const PORT = process.env.PORT || 5002; // Changed from 5001 to 5002
+const PORT = process.env.PORT || 5002; // Ensure this matches server.js
 
 // ======================
 // Configuration
@@ -41,8 +42,8 @@ const allowedOrigins = [
   'http://127.0.0.1:3003',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'http://localhost:5001',
-  'http://127.0.0.1:5001',
+  'http://localhost:5002',
+  'http://127.0.0.1:5002',
   'http://localhost:3004',
   'http://127.0.0.1:3004',
   'http://localhost:3005',
@@ -228,6 +229,25 @@ app._router.stack.forEach((middleware) => {
   }
 });
 console.log('========================\n');
+
+// ======================
+// Static File Serving
+// ======================
+if (process.env.NODE_ENV === 'production') {
+  // Serve static files from the React app
+  const buildPath = path.join(__dirname, 'dist');
+  app.use(express.static(buildPath));
+  
+  // Handle React routing, return all requests to React app
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(buildPath, 'index.html'));
+  });
+} else {
+  // In development, redirect to the Vite dev server for client-side routing
+  app.get('*', (req, res) => {
+    res.redirect(`http://localhost:3000${req.path}`);
+  });
+}
 
 // Debug endpoint to list all routes
 app.get('/debug/routes', (req, res) => {

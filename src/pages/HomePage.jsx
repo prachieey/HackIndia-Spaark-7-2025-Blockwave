@@ -73,15 +73,6 @@ const HomePage = () => {
 
   // Get resellable tickets (not used, not already for sale)
   const resellableTickets = userTickets?.filter(ticket => !ticket.isUsed && !ticket.isForSale) || [];
-  
-  const handleCreateEvent = (e) => {
-    if (!isAuthenticated) {
-      e.preventDefault();
-      openAuthModal('signup');
-    } else {
-      navigate('/user/create-event');
-    }
-  };
 
   const handleExploreEvents = (e) => {
     e.preventDefault();
@@ -128,135 +119,157 @@ const HomePage = () => {
   return (
     <>
       {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
-        <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-space-black opacity-90"></div>
-          <div className="absolute inset-0 bg-gradient-to-b from-deep-purple/20 to-space-black"></div>
-        </div>
+      {/* Hero Section */}
+<section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
+  {/* Background Video */}
+  <div className="absolute inset-0 overflow-hidden">
+    <video 
+      className="absolute inset-0 w-full h-full object-cover z-0" 
+      autoPlay 
+      loop 
+      muted 
+      playsInline
+      preload="auto"
+    >
+      <source 
+        src="/videos/hero-video.mp4" 
+        type="video/mp4" 
+      />
+      {/* Fallback content */}
+      <div className="absolute inset-0 bg-gradient-to-br from-deep-purple-900 to-space-black"></div>
+    </video>
+    <div className="absolute inset-0 bg-black/60 z-0"></div>
+  </div>
+
+  {/* Dark Overlay */}
+  <div className="absolute inset-0 bg-black/60 z-0"></div>
+
+  <div className="container mx-auto px-4 z-10 py-20">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+      {/* Left Content */}
+      <motion.div
+        initial={{ opacity: 0, x: -50 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.8 }}
+        className="space-y-6"
+      >
+        <h1 className="text-4xl md:text-6xl font-bold text-holographic-white leading-tight">
+          Secure Event Ticketing with <span className="text-tech-blue">Dynamic QR</span> Technology
+        </h1>
         
-        <div className="container mx-auto px-4 z-10 py-20">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <motion.div
-              initial={{ opacity: 0, x: -50 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8 }}
-              className="space-y-6"
+        <p className="tagline text-2xl">No Scams, Just Scans</p>
+        
+        <p className="text-holographic-white/80 text-lg">
+          Scantyx uses blockchain technology to create tamper-proof tickets with dynamic QR codes, 
+          eliminating fraud and making event attendance seamless.
+        </p>
+        
+        <div className="flex flex-wrap gap-4">
+          {isAuthenticated ? (
+            <Link 
+              to="/user/create-event" 
+              className="btn btn-primary"
+              onClick={handleCreateEvent}
             >
-              <h1 className="text-4xl md:text-6xl font-bold text-holographic-white leading-tight">
-                Secure Event Ticketing with <span className="text-tech-blue">Dynamic QR</span> Technology
-              </h1>
-              
-              <p className="tagline text-2xl">No Scams, Just Scans</p>
-              
-              <p className="text-holographic-white/80 text-lg">
-                Scantyx uses blockchain technology to create tamper-proof tickets with dynamic QR codes, 
-                eliminating fraud and making event attendance seamless.
-              </p>
-              
-              <div className="flex flex-wrap gap-4">
-                {isAuthenticated ? (
-                  <Link 
-                    to="/user/create-event" 
-                    className="btn btn-primary"
-                    onClick={handleCreateEvent}
-                  >
-                    Host an Event
-                  </Link>
-                ) : (
-                  <button 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      console.log('Get Started clicked');
-                      openAuthModal('signup');
-                    }} 
-                    className="btn btn-primary"
-                  >
-                    Get Started
-                  </button>
-                )}
-                <Link 
-                  to="/explore"
-                  className="btn btn-outline"
-                >
-                  Explore Events
-                </Link>
+              Host an Event
+            </Link>
+          ) : (
+            <button 
+              onClick={(e) => {
+                e.preventDefault();
+                console.log('Get Started clicked');
+                openAuthModal('signup');
+              }} 
+              className="btn btn-primary"
+            >
+              Get Started
+            </button>
+          )}
+          <Link 
+            to="/explore"
+            className="btn btn-outline"
+          >
+            Explore Events
+          </Link>
+        </div>
+      </motion.div>
+      
+      {/* Right Ticket Card */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.8, delay: 0.2 }}
+        className="flex justify-center"
+      >
+        <div className="relative w-full max-w-md">
+          <div className="absolute -inset-0.5 bg-deep-purple rounded-2xl blur-lg opacity-75 animate-pulse-slow"></div>
+          <div className="relative bg-space-black/80 border-2 border-deep-purple rounded-2xl p-6 shadow-xl">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-holographic-white">TechFest 2025</h3>
+                <p className="text-tech-blue">Bangalore, India</p>
               </div>
-            </motion.div>
+              <div className="bg-deep-purple text-holographic-white px-3 py-1 rounded-lg">
+                ₹1,499
+              </div>
+            </div>
             
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="flex justify-center"
-            >
-              <div className="relative w-full max-w-md">
-                <div className="absolute -inset-0.5 bg-deep-purple rounded-2xl blur-lg opacity-75 animate-pulse-slow"></div>
-                <div className="relative bg-space-black border-2 border-deep-purple rounded-2xl p-6 shadow-xl">
-                  <div className="flex justify-between items-center mb-6">
-                    <div>
-                      <h3 className="text-xl font-bold text-holographic-white">TechFest 2025</h3>
-                      <p className="text-tech-blue">Bangalore, India</p>
-                    </div>
-                    <div className="bg-deep-purple text-holographic-white px-3 py-1 rounded-lg">
-                      ₹1,499
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-center mb-6">
-                    <QrCode className="h-48 w-48 text-deep-purple" />
-                  </div>
-                  
-                  <div className="mt-12 space-y-4">
-                    <div className="flex items-center space-x-4 group cursor-pointer hover:bg-gray-800/50 p-3 rounded-lg transition-colors">
-                      <div className="p-3 rounded-full bg-deep-purple/10 text-deep-purple group-hover:bg-deep-purple/20 transition-colors">
-                        <Shield className="w-6 h-6" />
-                      </div>
-                      <p className="text-holographic-white/80 group-hover:text-white transition-colors">
-                        Secure & Verifiable Tickets
-                      </p>
-                    </div>
-                    <div className="flex items-center space-x-4 group cursor-pointer hover:bg-gray-800/50 p-3 rounded-lg transition-colors">
-                      <div className="p-3 rounded-full bg-tech-blue/10 text-tech-blue group-hover:bg-tech-blue/20 transition-colors">
-                        <QrCode className="w-6 h-6" />
-                      </div>
-                      <p className="text-holographic-white/80 group-hover:text-white transition-colors">
-                        Dynamic QR Technology
-                      </p>
-                    </div>
-                    <div className="flex items-center space-x-4 group cursor-pointer hover:bg-gray-800/50 p-3 rounded-lg transition-colors"
-                         onClick={() => window.scrollTo({ top: document.getElementById('how-it-works').offsetTop - 100, behavior: 'smooth' })}>
-                      <div className="p-3 rounded-full bg-green-500/10 text-green-500 group-hover:bg-green-500/20 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                          <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                        </svg>
-                      </div>
-                      <p className="text-holographic-white/80 group-hover:text-white transition-colors">
-                        How It Works
-                      </p>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-holographic-white/70">Date:</span>
-                      <span className="text-holographic-white">March 15, 2025</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-holographic-white/70">Ticket ID:</span>
-                      <span className="text-holographic-white">#SCX25789</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-holographic-white/70">Status:</span>
-                      <span className="text-validation-green">Valid</span>
-                    </div>
-                  </div>
+            <div className="flex justify-center mb-6">
+              <QrCode className="h-48 w-48 text-deep-purple" />
+            </div>
+            
+            <div className="mt-12 space-y-4">
+              <div className="flex items-center space-x-4 group cursor-pointer hover:bg-gray-800/50 p-3 rounded-lg transition-colors">
+                <div className="p-3 rounded-full bg-deep-purple/10 text-deep-purple group-hover:bg-deep-purple/20 transition-colors">
+                  <Shield className="w-6 h-6" />
                 </div>
+                <p className="text-holographic-white/80 group-hover:text-white transition-colors">
+                  Secure & Verifiable Tickets
+                </p>
               </div>
-            </motion.div>
+              <div className="flex items-center space-x-4 group cursor-pointer hover:bg-gray-800/50 p-3 rounded-lg transition-colors">
+                <div className="p-3 rounded-full bg-tech-blue/10 text-tech-blue group-hover:bg-tech-blue/20 transition-colors">
+                  <QrCode className="w-6 h-6" />
+                </div>
+                <p className="text-holographic-white/80 group-hover:text-white transition-colors">
+                  Dynamic QR Technology
+                </p>
+              </div>
+              <div className="flex items-center space-x-4 group cursor-pointer hover:bg-gray-800/50 p-3 rounded-lg transition-colors"
+                   onClick={() => window.scrollTo({ top: document.getElementById('how-it-works').offsetTop - 100, behavior: 'smooth' })}>
+                <div className="p-3 rounded-full bg-green-500/10 text-green-500 group-hover:bg-green-500/20 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                  </svg>
+                </div>
+                <p className="text-holographic-white/80 group-hover:text-white transition-colors">
+                  How It Works
+                </p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-holographic-white/70">Date:</span>
+                <span className="text-holographic-white">March 15, 2025</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-holographic-white/70">Ticket ID:</span>
+                <span className="text-holographic-white">#SCX25789</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-holographic-white/70">Status:</span>
+                <span className="text-validation-green">Valid</span>
+              </div>
+            </div>
           </div>
         </div>
-      </section>
+      </motion.div>
+    </div>
+  </div>
+</section>
+
 
       {/* Features Section */}
       <section className="py-20 bg-space-black">

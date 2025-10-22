@@ -153,31 +153,72 @@ const restrictTo = (...roles) => {
         new AppError('You do not have permission to perform this action', 403)
       );
     }
-
     next();
   };
 };
 
-// Get current user's profile
-const getMe = (req, res, next) => {
-  req.params.id = req.user.id;
-  next();
-};
-
-// Get user by ID
-const getUser = catchAsync(async (req, res, next) => {
-  const user = await User.findById(req.params.id).select('-__v -passwordChangedAt');
-
-  if (!user) {
-    return next(new AppError('No user found with that ID', 404));
+// Verify JWT token
+const verifyToken = catchAsync(async (req, res, next) => {
+  // 1) Get the token from the request
+  let token;
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer')
+  ) {
+    token = req.headers.authorization.split(' ')[1];
+  } else if (req.cookies.jwt) {
+    token = req.cookies.jwt;
   }
 
-  res.status(200).json({
-    status: 'success',
-    data: {
-      user,
-    },
-  });
+  if (!token) {
+    return res.status(200).json({
+      valid: false,
+      message: 'No token provided'
+    });
+  }
+
+  try {
+    // 2) Verify the token
+    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+
+    // 3) Check if user still exists
+    const currentUser = await User.findById(decoded.id);
+    if (!currentUser) {
+      return res.status(200).json({
+        valid: false,
+        message: 'The user belonging to this token no longer exists.'
+      });
+    }
+
+    // 4) Check if user changed password after the token was issued
+    if (currentUser.changedPasswordAfter(decoded.iat)) {
+      return res.status(200).json({
+        valid: false,
+        message: 'User recently changed password! Please log in again.'
+      });
+    }
+
+    // 5) If everything is ok, return the user data
+    // Remove sensitive data from the output
+    currentUser.password = undefined;
+    currentUser.active = undefined;
+    currentUser.__v = undefined;
+
+    res.status(200).json({
+      valid: true,
+      user: currentUser
+    });
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(200).json({
+        valid: false,
+        message: 'Invalid or expired token. Please log in again.'
+      });
+    }
+    
+    // For other errors, pass to the error handling middleware
+    next(error);
+  }
 });
 
 const logout = (req, res) => {
@@ -290,6 +331,28 @@ const updatePassword = catchAsync(async (req, res, next) => {
 createSendToken(user, 200, res);
 });
 
+// Get current user's profile
+const getMe = (req, res, next) => {
+  req.params.id = req.user.id;
+  next();
+};
+
+// Get user by ID
+const getUser = catchAsync(async (req, res, next) => {
+  const user = await User.findById(req.params.id).select('-__v -passwordChangedAt');
+
+  if (!user) {
+    return next(new AppError('No user found with that ID', 404));
+  }
+
+  res.status(200).json({
+    status: 'success',
+    data: {
+      user,
+    },
+  });
+});
+
 export {
   signup,
   login,
@@ -302,4 +365,5 @@ export {
   updatePassword,
   getMe,
   getUser,
+  verifyToken,
 };

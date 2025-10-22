@@ -22,7 +22,7 @@ const ForgotPasswordPage = () => {
       setLoading(true);
       setMessage('');
       
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api'}/v1/auth/forgotPassword`, {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/api'}/v1/auth/forgotPassword`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

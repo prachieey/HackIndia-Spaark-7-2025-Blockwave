@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { toast } from 'react-hot-toast';
 import AdminSidebar from '../components/admin/AdminSidebar.jsx';
 import AdminHeader from '../components/admin/AdminHeader.jsx';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,6 +24,7 @@ const AdminLayout = () => {
       });
     } else if (!isAdmin) {
       console.log('Not an admin, redirecting to home');
+      toast.error('You do not have permission to access the admin dashboard');
       navigate('/', { replace: true });
     } else {
       console.log('User is authenticated and is admin');

@@ -1,49 +1,34 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import { toast } from 'react-hot-toast';
+import { toast } from 'react-toastify';
 
-const CustomToast = ({ type = 'error', message, toastId }) => {
-  // Ensure type is either 'error' or 'success'
+// Custom toast component
+const CustomToast = ({ closeToast, toastProps, type = 'error', message }) => {
   const toastType = type === 'success' ? 'success' : 'error';
   const bgColor = toastType === 'error' ? 'bg-red-100' : 'bg-green-100';
   const textColor = toastType === 'error' ? 'text-red-800' : 'text-green-800';
   const iconBgColor = toastType === 'error' ? 'bg-red-200' : 'bg-green-200';
   const iconColor = toastType === 'error' ? 'text-red-600' : 'text-green-600';
   
-  // Auto-dismiss after 5 seconds
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (toastId) {
-        toast.dismiss(toastId);
-      }
-    }, 5000);
-    
-    return () => clearTimeout(timer);
-  }, [toastId]);
-  
   // Safely get message text
   const getMessage = () => {
-    if (!message) return null; // Don't show 'An unknown error occurred'
+    if (!message) return null;
     if (typeof message === 'string') return message;
-    if (typeof message === 'object' && message.message) return message.message;
+    if (message.message) return message.message;
     try {
       return String(message);
     } catch (e) {
-      return null; // Don't show 'An error occurred'
+      return null;
     }
   };
   
-  // Don't render anything if there's no message
-  if (!getMessage()) return null;
+  const messageContent = getMessage();
+  if (!messageContent) return null;
 
   return (
     <div 
-      className={`fixed bottom-4 right-4 flex items-center justify-between w-full max-w-md p-4 ${bgColor} ${textColor} rounded-lg shadow-lg z-50`}
+      className={`flex items-center justify-between w-full p-4 ${bgColor} ${textColor} rounded-lg shadow-lg`}
       role="alert"
-      style={{
-        animation: 'slideIn 0.3s ease-out forwards',
-        maxWidth: 'calc(100% - 2rem)'
-      }}
     >
       <div className="flex items-center">
         <div className={`inline-flex items-center justify-center flex-shrink-0 w-8 h-8 ${iconBgColor} ${iconColor} rounded-lg`}>
@@ -58,13 +43,13 @@ const CustomToast = ({ type = 'error', message, toastId }) => {
           )}
         </div>
         <div className="ml-3 text-sm font-medium">
-          {getMessage()}
+          {messageContent}
         </div>
       </div>
       <button
         type="button"
         className={`ml-4 -mx-1.5 -my-1.5 ${bgColor} ${textColor} rounded-lg focus:ring-2 focus:ring-${toastType === 'error' ? 'red' : 'green'}-400 p-1.5 hover:${toastType === 'error' ? 'bg-red' : 'bg-green'}-200 inline-flex h-8 w-8`}
-        onClick={() => toast.dismiss(toastId)}
+        onClick={closeToast}
         aria-label="Close"
       >
         <span className="sr-only">Close</span>
@@ -74,20 +59,38 @@ const CustomToast = ({ type = 'error', message, toastId }) => {
   );
 };
 
-export const showToast = (type, message) => {
-  // Validate input
+// Show a custom toast
+const showToast = (type, message, options = {}) => {
   const toastType = type === 'success' ? 'success' : 'error';
-  
-  return toast.custom(
-    (t) => <CustomToast type={toastType} message={message} toastId={t.id} />,
+  const defaultOptions = {
+    position: 'top-center',
+    autoClose: toastType === 'error' ? 5000 : 3000,
+    hideProgressBar: false,
+    closeOnClick: true,
+    pauseOnHover: true,
+    draggable: true,
+    closeButton: false,
+    ...options
+  };
+
+  return toast(
+    ({ closeToast }) => (
+      <CustomToast 
+        closeToast={closeToast} 
+        type={toastType} 
+        message={message} 
+      />
+    ),
     {
-      duration: toastType === 'error' ? 5000 : 3000,
-      position: 'top-center',
+      ...defaultOptions,
+      className: 'custom-toast',
+      bodyClassName: 'custom-toast-body'
     }
   );
 };
 
-export const showError = (message) => showToast('error', message);
-export const showSuccess = (message) => showToast('success', message);
+// Export helper functions
+export const showError = (message, options) => showToast('error', message, options);
+export const showSuccess = (message, options) => showToast('success', message, options);
 
 export default CustomToast;

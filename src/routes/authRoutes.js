@@ -15,6 +15,7 @@ router.post('/login', authController.login);
 router.get('/logout', authController.logout);
 router.post('/forgotPassword', authController.forgotPassword);
 router.patch('/resetPassword/:token', authController.resetPassword);
+router.get('/verify', authController.verifyToken);
 
 // Protected routes (require authentication)
 router.use(authController.protect);

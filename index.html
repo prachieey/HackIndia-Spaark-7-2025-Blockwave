@@ -4,23 +4,22 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Development CSP (less restrictive) -->
-    <!-- Development CSP - will be more restrictive in production -->
+    <!-- Development CSP - Configured for video and necessary resources -->
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
-      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.googleapis.com https://*.gstatic.com https://*.firebase.com https://*.firebaseio.com https://www.googletagmanager.com https://www.google-analytics.com https://apis.google.com;
+      script-src 'self' 'unsafe-inline' 'unsafe-eval';
       style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com data:;
       img-src 'self' data: blob: https:;
-      font-src 'self' data: https://fonts.gstatic.com;
-      connect-src 'self' http://localhost:* ws://localhost:3003 wss://localhost:3003 https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebase.com https://*.google-analytics.com https://*.googletagmanager.com https://*.firebaseinstallations.googleapis.com https://*.firestore.googleapis.com https://*.cloudfunctions.net https://*.google.com;
-      frame-src 'self' https://*.google.com https://*.firebaseapp.com https://*.firebase.com https://*.gstatic.com;
-      media-src 'self' blob: https:;
-      worker-src 'self' blob: 'unsafe-inline' 'unsafe-eval';
-      child-src 'self' blob:;
+      connect-src 'self' http://localhost:* https://localhost:* ws://localhost:* wss://localhost:*;
+      media-src 'self' blob: data: https: http: 
+        https://*.w3schools.com 
+        https://*.googleapis.com 
+        https://*.gstatic.com 
+        https://storage.googleapis.com;
+      worker-src 'self' blob:;
+      frame-src 'self';
       object-src 'none';
-      base-uri 'self';
-      form-action 'self';
-      upgrade-insecure-requests;
     ">
     <meta name="react-version" content="18.2.0">
     <link rel="preconnect" href="https://fonts.googleapis.com">
