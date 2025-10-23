@@ -7,7 +7,8 @@ import autoprefixer from 'autoprefixer';
 
 // Load environment variables
 const backendPort = '5002';
-const frontendPort = parseInt(process.env.FRONTEND_PORT || '3000', 10);
+// Use port 3001 to avoid conflicts
+const frontendPort = 3001;
 
 // Proxy configuration
 const proxyConfig: Record<string, string | ProxyOptions> = {
@@ -131,12 +132,29 @@ export default defineConfig({
       'ethers',
       '@web3-react/core',
       '@web3-react/injected-connector',
+      '@tsparticles/engine',
+      'three',
+      'three/examples/jsm/loaders/GLTFLoader',
+      'three/examples/jsm/controls/OrbitControls',
       '@emotion/react',
       '@emotion/styled',
+      '@radix-ui/react-*',
+      'framer-motion',
+      'axios',
+      'date-fns',
+      'firebase/app',
+      'firebase/auth',
+      'firebase/firestore'
     ],
-    exclude: ['@nomicfoundation/hardhat-chai-matchers', 'js-big-decimal'],
+    exclude: [
+      '@nomicfoundation/hardhat-chai-matchers',
+      'js-big-decimal'
+    ],
     esbuildOptions: {
       target: 'es2020',
+      define: {
+        global: 'globalThis',
+      },
     },
   },
   

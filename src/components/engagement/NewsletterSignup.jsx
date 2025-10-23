@@ -20,7 +20,7 @@ const NewsletterSignup = () => {
     
     try {
       console.log('Sending subscription request to backend...');
-      const response = await fetch('/api/v1/email/subscribe', {
+      const response = await fetch('/api/newsletter/subscribe', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -29,7 +29,18 @@ const NewsletterSignup = () => {
         body: JSON.stringify({ email })
       });
       
-      const result = await response.json().catch(() => ({}));
+      // Handle non-JSON responses
+      const contentType = response.headers.get('content-type');
+      let result;
+      
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        throw new Error('Server returned a non-JSON response');
+      }
+      
       console.log('Backend Response:', { status: response.status, statusText: response.statusText, result });
       
       if (response.ok) {
@@ -41,15 +52,22 @@ const NewsletterSignup = () => {
         // Show success toast
         toast.success(result.message || 'Successfully subscribed to our newsletter!', {
           position: "top-center",
-          autoClose: 3000,
+          autoClose: 5000,
           hideProgressBar: false,
           closeOnClick: true
         });
       } else {
-        const errorMessage = result.message || result.error || `Failed to subscribe. Status: ${response.status}`;
+        const errorMessage = result.message || 
+                           result.error || 
+                           `Failed to subscribe. Status: ${response.status} ${response.statusText}`;
         console.error('Subscription failed:', errorMessage, result);
         setStatus('error');
-        toast.error(errorMessage);
+        toast.error(errorMessage, {
+          position: "top-center",
+          autoClose: 5000,
+          hideProgressBar: false,
+          closeOnClick: true
+        });
       }
     } catch (error) {
       console.error('Error during subscription:', error);

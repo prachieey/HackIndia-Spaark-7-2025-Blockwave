@@ -14,7 +14,11 @@ import eventRoutes from './src/routes/eventRoutes.js';
 import authRoutes from './src/routes/authRoutes.js';
 import reviewRoutes from './src/routes/reviewRoutes.js';
 import emailRoutes from './src/routes/emailRoutes.js';
+import newsletterRoutes from './src/routes/newsletterRoutes.js';
 import setupStatic from './setupStatic.js';
+
+// Import newsletter scheduler
+import { initializeDefaultNewsletters } from './src/services/newsletterScheduler.js';
 
 // API Routes
 const API_PREFIX = '/api/v1';
@@ -215,7 +219,13 @@ console.log('Mounting API routes...');
 app.use(`${API_PREFIX}/events`, eventRoutes);
 app.use(`${API_PREFIX}/auth`, authRoutes);
 app.use(`${API_PREFIX}/reviews`, reviewRoutes);
-app.use(`${API_PREFIX}/email`, emailRoutes);
+
+// Mount email and newsletter routes (without version prefix for backward compatibility)
+app.use('/api/email', emailRoutes);
+app.use('/api/newsletter', newsletterRoutes);
+
+// Initialize newsletter scheduler
+initializeDefaultNewsletters();
 
 // Log all registered routes
 console.log('\n=== REGISTERED ROUTES ===');
