@@ -1,17 +1,31 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { jwtDecode } from 'jwt-decode';
 import { api } from '../utils/api';
+import http from '../services/httpService';
 
 // Helper function to check if a JWT token is expired
 const isTokenExpired = (token) => {
+  if (!token) return true;
   try {
     const decoded = jwtDecode(token);
     return decoded.exp < Date.now() / 1000;
   } catch (error) {
     console.error('Error decoding token:', error);
     return true; // If we can't decode the token, consider it expired
+  }
+};
+
+// Helper to safely parse JSON from localStorage
+const safeJsonParse = (key, defaultValue = null) => {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultValue;
+  } catch (error) {
+    console.error(`Error parsing ${key} from localStorage:`, error);
+    return defaultValue;
   }
 };
 
@@ -32,22 +46,59 @@ export const AuthProvider = ({ children }) => {
   const location = useLocation();
   
   // State for user and loading
-  const [user, setUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem('user');
-      return stored ? JSON.parse(stored) : null;
-    } catch (error) {
-      console.error('Error parsing user data from localStorage:', error);
-      return null;
-    }
-  });
-  
+  const [user, setUser] = useState(() => safeJsonParse('user'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
   
   // Track if we're currently refreshing the token to prevent multiple refresh attempts
   const isRefreshing = useRef(false);
+  
+  // Store tokens in memory to reduce localStorage access
+  const tokenRef = useRef(localStorage.getItem('token'));
+  const refreshTokenRef = useRef(localStorage.getItem('refreshToken'));
+  
+  // Update token references when they change
+  const updateTokenRefs = useCallback((token, refreshToken) => {
+    tokenRef.current = token;
+    refreshTokenRef.current = refreshToken;
+  }, []);
+  
+  // Save auth data to localStorage and update refs
+  const persistAuthData = useCallback(({ user: userData, token, refreshToken }) => {
+    try {
+      if (userData) {
+        const userToStore = { ...userData };
+        // Don't store sensitive data
+        delete userToStore.password;
+        delete userToStore.tokens;
+        
+        localStorage.setItem('user', JSON.stringify(userToStore));
+        setUser(userToStore);
+      }
+      
+      if (token) {
+        localStorage.setItem('token', token);
+        tokenRef.current = token;
+      }
+      
+      if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+        refreshTokenRef.current = refreshToken;
+      }
+      
+      // Update axios default headers
+      if (token) {
+        http.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error persisting auth data:', error);
+      return false;
+    }
+  }, []);
   
   // Check if user is authenticated
   const isAuthenticated = useCallback(() => {
@@ -63,45 +114,132 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // Logout function
-  const logout = useCallback(() => {
-    try {
-      // Clear user state and local storage
-      setUser(null);
-      setError(null);
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      
-      // Clear any pending API requests if the API client supports it
-      if (api && typeof api.clearPendingRequests === 'function') {
-        api.clearPendingRequests();
-      }
-      
-      // Redirect to login page
-      navigate('/login');
-    } catch (error) {
-      console.error('Error during logout:', error);
+  // Logout function with cleanup
+  const logout = useCallback((options = {}) => {
+    const { redirectTo = '/login', showMessage = true } = options;
+    
+    // Clear all auth data
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    
+    // Clear token references
+    tokenRef.current = null;
+    refreshTokenRef.current = null;
+    
+    // Clear axios headers
+    delete http.defaults.headers.common['Authorization'];
+    
+    // Reset state
+    setUser(null);
+    setError(null);
+    
+    // Show logout message if needed
+    if (showMessage) {
+      toast.info('You have been logged out');
     }
+    
+    // Redirect if needed
+    if (redirectTo && window.location.pathname !== redirectTo) {
+      navigate(redirectTo);
+    }
+    
+    // Clear any pending requests
+    isRefreshing.current = false;
+    
   }, [navigate]);
 
-  // Refresh token function
-  const refreshToken = useCallback(async () => {
-    try {
-      const response = await api.post('/auth/refresh-token', {}, {
-        withCredentials: true
+  // Enhanced token refresh with retry logic
+  const refreshToken = useCallback(async (maxRetries = 3) => {
+    // If we're already refreshing, return the current promise
+    if (isRefreshing.current) {
+      return new Promise((resolve, reject) => {
+        const checkRefresh = () => {
+          if (!isRefreshing.current) {
+            if (tokenRef.current) {
+              resolve(tokenRef.current);
+            } else {
+              reject(new Error('Token refresh failed'));
+            }
+          } else {
+            setTimeout(checkRefresh, 100);
+          }
+        };
+        checkRefresh();
       });
-      
-      if (response && response.data && response.data.token && response.data.user) {
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-        return response.data.token;
-      }
-      return null;
-    } catch (error) {
-      console.error('Error refreshing token:', error);
+    }
+    
+    const currentRefreshToken = refreshTokenRef.current || localStorage.getItem('refreshToken');
+    
+    if (!currentRefreshToken) {
+      logout({ showMessage: false });
       return null;
     }
-  }, []);
+    
+    isRefreshing.current = true;
+    
+    try {
+      let retryCount = 0;
+      let lastError;
+      
+      while (retryCount < maxRetries) {
+        try {
+          const response = await http.post('/auth/refresh-token', { 
+            refreshToken: currentRefreshToken 
+          }, { 
+            skipAuthRefresh: true 
+          });
+          
+          const { token: newToken, refreshToken: newRefreshToken, user: userData } = response.data;
+          
+          if (!newToken || !newRefreshToken) {
+            throw new Error('Invalid token response');
+          }
+          
+          // Persist the new tokens
+          persistAuthData({ 
+            token: newToken, 
+            refreshToken: newRefreshToken,
+            user: userData
+          });
+          
+          return newToken;
+          
+        } catch (error) {
+          lastError = error;
+          retryCount++;
+          
+          // If it's a network error or server error, retry after delay
+          if (error.response?.status >= 500 || !error.response) {
+            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
+            continue;
+          }
+          
+          // For other errors, break the retry loop
+          break;
+        }
+      }
+      
+      // If we get here, all retries failed
+      throw lastError || new Error('Failed to refresh token');
+      
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      
+      // If refresh token is invalid, logout the user
+      if (error.response?.status === 401) {
+        logout({ 
+          redirectTo: '/login',
+          showMessage: true
+        });
+      }
+      
+      return null;
+      
+    } finally {
+      isRefreshing.current = false;
+    }
+  }, [logout, persistAuthData]);
 
   // Check authentication status on mount and route change
   useEffect(() => {

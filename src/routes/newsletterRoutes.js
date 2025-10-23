@@ -2,7 +2,7 @@ import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { subscribeEmail, unsubscribeEmail, getSubscribers } from '../services/subscriptionService.js';
 import { sendNewsletter } from '../services/emailService.js';
-import { isAuthenticated, isAdmin } from '../middleware/auth.js';
+import { protect, restrictTo } from '../middleware/auth.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
@@ -105,7 +105,7 @@ router.post(
 // @route   GET /api/newsletter/subscribers
 // @desc    Get all newsletter subscribers (Admin only)
 // @access  Private/Admin
-router.get('/subscribers', isAuthenticated, isAdmin, async (req, res) => {
+router.get('/subscribers', protect, restrictTo('admin'), async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const result = await getSubscribers({ 
@@ -134,8 +134,8 @@ router.get('/subscribers', isAuthenticated, isAdmin, async (req, res) => {
 // @access  Private/Admin
 router.post(
   '/send',
-  isAuthenticated,
-  isAdmin,
+  protect,
+  restrictTo('admin'),
   [
     body('subject').trim().notEmpty().withMessage('Subject is required'),
     body('content').trim().notEmpty().withMessage('Content is required'),

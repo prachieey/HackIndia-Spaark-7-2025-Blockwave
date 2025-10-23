@@ -11,7 +11,7 @@ const DEFAULT_API_VERSION = 'v1';
 const getBackendUrl = () => {
   // In development, always use localhost with the backend port
   if (import.meta.env.DEV) {
-    return `http://127.0.0.1:5003`; // Hardcoded to match the backend port
+    return `http://localhost:5003`; // Using localhost to match CSP rules
   }
   
   // In production, use the Vite environment variable if set
