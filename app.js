@@ -15,6 +15,7 @@ import authRoutes from './src/routes/authRoutes.js';
 import reviewRoutes from './src/routes/reviewRoutes.js';
 import emailRoutes from './src/routes/emailRoutes.js';
 import newsletterRoutes from './src/routes/newsletterRoutes.js';
+import demoRequestRoutes from './src/routes/demoRequestRoutes.js';
 import setupStatic from './setupStatic.js';
 
 // Import newsletter scheduler
@@ -223,6 +224,7 @@ app.use(`${API_PREFIX}/reviews`, reviewRoutes);
 // Mount email and newsletter routes (without version prefix for backward compatibility)
 app.use('/api/email', emailRoutes);
 app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/demo-requests', demoRequestRoutes);
 
 // Initialize newsletter scheduler
 initializeDefaultNewsletters();

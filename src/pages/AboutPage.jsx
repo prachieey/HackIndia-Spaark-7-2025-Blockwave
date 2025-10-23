@@ -151,7 +151,7 @@ export default function About() {
     
     try {
       console.log('Sending request to server...');
-      const response = await fetch('/api/demo-requests', {
+      const response = await fetch('http://localhost:5002/api/demo-requests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
