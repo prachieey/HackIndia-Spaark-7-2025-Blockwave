@@ -38,6 +38,96 @@ const PORT = process.env.PORT || 5002; // Ensure this matches server.js
 const isProduction = process.env.NODE_ENV === 'production';
 const isDevelopment = !isProduction;
 
+// Security headers middleware
+app.use((req, res, next) => {
+  // Set Content Security Policy
+  const csp = [
+    // Development CSP - will be more restrictive in production
+    "default-src 'self'",
+    "connect-src 'self' " +
+      "https://*.firebaseio.com " +
+      "https://*.googleapis.com " +
+      "https://*.firebase.com " +
+      "https://*.gstatic.com " +
+      "https://identitytoolkit.googleapis.com " +
+      "ws://localhost:* wss://localhost:* " +
+      "ws://127.0.0.1:* wss://127.0.0.1:*",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' " +
+      "https://*.google.com " +
+      "https://*.googleapis.com " +
+      "https://*.gstatic.com " +
+      "https://*.firebase.com " +
+      "https://*.firebaseio.com " +
+      "https://www.gstatic.com " +
+      "https://apis.google.com https://apis.google.com/js/api.js " +
+      "https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ " +
+      "https://www.google-analytics.com https://www.googletagmanager.com",
+    
+    "style-src 'self' 'unsafe-inline' " +
+      "https://fonts.googleapis.com " +
+      "https://*.googleapis.com",
+    
+    "img-src 'self' data: blob: https: http: " +
+      "https://*.google.com " +
+      "https://*.googleusercontent.com " +
+      "https://*.gstatic.com",
+    
+    "font-src 'self' data: " +
+      "https://fonts.gstatic.com " +
+      "https://*.gstatic.com",
+    
+    "connect-src 'self' " +
+      "https://*.googleapis.com " +
+      "https://*.firebaseio.com " +
+      "https://*.firebase.com " +
+      "https://*.google-analytics.com " +
+      "https://identitytoolkit.googleapis.com " +
+      "https://securetoken.googleapis.com " +
+      "https://www.googleapis.com " +
+      "https://accounts.google.com " +
+      "https://oauth2.googleapis.com " +
+      "https://*.firebaseinstallations.googleapis.com " +
+      "https://*.identitytoolkit.googleapis.com " +
+      "https://*.firebaseauth.googleapis.com " +
+      "https://*.google.com " +
+      "wss://*.firebaseio.com " +
+      "http://localhost:* " +
+      "https://localhost:* " +
+      "ws://localhost:* " +
+      "wss://localhost:* " +
+      "http://127.0.0.1:* " +
+      "https://127.0.0.1:* " +
+      "ws://127.0.0.1:* " +
+      "wss://127.0.0.1:* " +
+      "https://api.emailjs.com",
+    
+    "frame-src 'self' data: " +
+      "https://*.firebaseapp.com " +
+      "https://*.google.com " +
+      "https://accounts.google.com " +
+      "https://*.recaptcha.google.com " +
+      "https://www.google.com/recaptcha/ " +
+      "https://recaptcha.google.com/recaptcha/ " +
+      "https://www.gstatic.com/recaptcha/ " +
+      "https://www.google.com/recaptcha/ ",
+    
+    "media-src 'self' data: blob: https: http:",
+    "worker-src 'self' blob: https://*.firebase.com https://*.firebaseapp.com",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'"
+  ];
+
+  // Set security headers
+  res.setHeader('Content-Security-Policy', csp.join('; ') + ';');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
+  next();
+});
+
 // CORS configuration
 const allowedOrigins = [
   'http://localhost:3000',
@@ -60,31 +150,65 @@ const allowedOrigins = [
 // Middleware
 // ======================
 
-// Request logging
-app.use(morgan(isDevelopment ? 'dev' : 'combined'));
-
 // CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests) in development
-    if (process.env.NODE_ENV !== 'production' && !origin) {
-      return callback(null, true);
-    }
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
     
-    // Check if origin is in allowedOrigins or if it's a local development server
-    if (allowedOrigins.includes(origin) || 
-        (process.env.NODE_ENV === 'development' && origin && 
-         (origin.includes('localhost') || origin.includes('127.0.0.1')))) {
-      return callback(null, true);
-    }
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:5002',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      'http://127.0.0.1:5002',
+      'http://localhost:5173', // Vite default dev server
+      'https://yourdomain.com',
+      'https://www.yourdomain.com'
+    ];
     
-    // Block the request if the origin is not allowed
-    console.warn(`CORS blocked: ${origin} is not in the allowed origins list`);
-    const errorMsg = `The CORS policy for this site does not allow access from ${origin}`;
-    return callback(new Error(errorMsg), false);
+    const isAllowed = allowedOrigins.some(allowed => 
+      origin === allowed || 
+      origin.startsWith(allowed.replace('*', ''))
+    );
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.warn('CORS blocked request from origin:', origin);
+      callback(new Error(`The CORS policy for this site does not allow access from ${origin}`));
+    }
   },
   credentials: true,
-  exposedHeaders: ['Set-Cookie', 'set-cookie'],
+  allowedHeaders: [
+    'x-client-version',
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  exposedHeaders: [
+    'Content-Range',
+    'X-Content-Range',
+    'X-Total-Count',
+    'X-Total-Pages',
+    'X-Page',
+    'X-Per-Page',
+    'X-Next-Page',
+    'X-Prev-Page',
+    'Content-Disposition',
+    'Content-Length',
+    'Content-Type',
+    'ETag',
+    'Last-Modified',
+    'Date',
+    'Cache-Control',
+    'Set-Cookie',
+    'set-cookie'
+  ],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
   allowedHeaders: [
     'Accept',

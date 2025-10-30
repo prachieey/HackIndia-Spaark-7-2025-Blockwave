@@ -7,7 +7,7 @@ import EventFilters from '../components/events/EventFilters';
 import EventMapView from '../components/events/EventMapView';
 import EventCard from '../components/events/EventCard';
 import { useEvents } from '../contexts/EventsContext';
-import { useAuth } from '../contexts/AuthContext';
+// Removed useAuth import as it's not needed for public access
 import { useWeb3 } from '../contexts/blockchain/Web3Context';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -15,8 +15,9 @@ import { Button } from '../components/ui/button';
 
 const ExplorePage = () => {
   const { events, loading, error, fetchEvents } = useEvents();
-  const { user } = useAuth();
+  // Removed user from useAuth since this is a public page
   const { isConnected } = useWeb3();
+  // No need to check authentication for explore page
   const navigate = useNavigate();
   const location = useLocation();
   

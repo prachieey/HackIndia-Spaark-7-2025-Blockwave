@@ -7,6 +7,8 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { EventsProvider } from './contexts/EventsContext';
 import { AuthModalProvider } from './contexts/AuthModalContext';
 import { TooltipProvider } from './components/ui/tooltip';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import App from './App';
 import './index.css';
 
@@ -20,6 +22,18 @@ createRoot(document.getElementById('root')).render(
               <AuthModalProvider>
                 <TooltipProvider>
                   <App />
+                  <ToastContainer
+                    position="top-right"
+                    autoClose={5000}
+                    hideProgressBar={false}
+                    newestOnTop={false}
+                    closeOnClick
+                    rtl={false}
+                    pauseOnFocusLoss
+                    draggable
+                    pauseOnHover
+                    theme="light"
+                  />
                 </TooltipProvider>
               </AuthModalProvider>
             </EventsProvider>

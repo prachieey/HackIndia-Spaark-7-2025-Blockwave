@@ -18,6 +18,7 @@ import UserLayout from './layouts/UserLayout.jsx';
 // Pages
 import HomePage from './pages/HomePage.jsx';
 import ExplorePage from './pages/ExplorePage.jsx';
+import EventsPage from './pages/EventsPage.jsx';
 import EventDetailsPage from './pages/EventDetailsPage.jsx';
 import BlockchainEventPage from './pages/BlockchainEventPage.jsx';
 import CreateEventPage from './pages/CreateEventPage.jsx';
@@ -101,15 +102,16 @@ function AppContent() {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log('Auth state changed:', { firebaseUser });
       
-      if (firebaseUser) {
+      // Only proceed with login if there's an actual authentication change
+      // and we're not in the middle of handling a redirect
+      if (firebaseUser && !isHandlingRedirect) {
         try {
           // Format the Firebase user to match your backend's user structure
           const userData = {
             _id: firebaseUser.uid,
             email: firebaseUser.email,
             name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
-            role: 'user', // Default role, adjust as needed
-            // Add any additional user properties you need
+            role: 'user',
             ...firebaseUser.providerData[0],
             emailVerified: firebaseUser.emailVerified,
             photoURL: firebaseUser.photoURL,
@@ -117,7 +119,7 @@ function AppContent() {
             uid: firebaseUser.uid
           };
           
-          // Log the formatted user data for debugging
+          console.log('Processing user data from auth state change', { userData });
           console.log('Formatted user data:', userData);
           
           // Call login with the formatted user data
@@ -143,9 +145,18 @@ function AppContent() {
   // Handle Google Sign-In redirect result
   useEffect(() => {
     const handleAuthRedirect = async () => {
+      setIsHandlingRedirect(true);
+      console.log('Starting auth redirect handling...');
+      
       // Check if we're coming back from a Google OAuth redirect
       const urlParams = new URLSearchParams(window.location.search);
       const isGoogleRedirect = urlParams.has('state') || urlParams.has('code') || urlParams.has('authuser');
+      
+      if (!isGoogleRedirect) {
+        console.log('No OAuth redirect detected, skipping...');
+        setIsHandlingRedirect(false);
+        return;
+      }
       
       if (!isGoogleRedirect) {
         console.log('Not in Google OAuth redirect flow');
@@ -282,9 +293,8 @@ function AppContent() {
       }
     };
 
-    // Only handle redirect if we're not already handling it and not authenticated
-    if (!isHandlingRedirect && !isAuthenticated) {
-      console.log('Starting auth redirect handling...');
+    // Only handle redirect if we're not already handling it
+    if (!isHandlingRedirect) {
       handleAuthRedirect();
     } else if (isAuthenticated) {
       console.log('Already authenticated, skipping redirect handling');
@@ -382,6 +392,7 @@ function AppContent() {
           {/* Public Routes */}
           <Route path="/" element={<MainLayout />}>
             <Route index element={<HomePage />} />
+            <Route path="events" element={<EventsPage />} />
             <Route path="explore" element={<ExplorePage />} />
             <Route path="resell" element={<ResellTicketsPage />} />
             <Route path="events/blockchain/:id" element={<BlockchainEventPage />} />
@@ -391,7 +402,6 @@ function AppContent() {
             <Route path="/demo" element={<Navigate to="/resell" replace />} />
             <Route path="/contact" element={<ContactPage />} />
             {/* Redirect old routes to new ones */}
-            <Route path="events" element={<Navigate to="/resell" replace />} />
             <Route path="tickets" element={<Navigate to="/about" replace />} />
             <Route path="/testimonials" element={<TestimonialsPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -482,15 +492,16 @@ function AuthInitializer({ children }) {
   return children;
 }
 
+// Move AuthInitializer inside AuthProvider to ensure context is available
 function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider>
         <AuthProvider>
-          <Web3Provider>
-            <EventsProvider>
-              <LocationProvider>
-                <AuthInitializer>
+          <AuthInitializer>
+            <Web3Provider>
+              <EventsProvider>
+                <LocationProvider>
                   <AppContent />
                   <ToastContainer 
                     position="top-right"
@@ -504,10 +515,10 @@ function App() {
                     pauseOnHover
                     theme="light"
                   />
-                </AuthInitializer>
-              </LocationProvider>
-            </EventsProvider>
-          </Web3Provider>
+                </LocationProvider>
+              </EventsProvider>
+            </Web3Provider>
+          </AuthInitializer>
         </AuthProvider>
       </ThemeProvider>
     </ErrorBoundary>

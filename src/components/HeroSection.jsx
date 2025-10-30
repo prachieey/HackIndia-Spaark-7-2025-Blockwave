@@ -157,16 +157,24 @@ const HeroSection = ({ onExploreEvents }) => {
     playVideo();
     
     // Add a one-time click handler to start video if autoplay was prevented
-    const handleClick = () => {
-      if (videoRef.current && videoRef.current.paused) {
+    const handleVideoClick = (e) => {
+      // Only handle clicks directly on the video element
+      if (e.target === videoRef.current && videoRef.current.paused) {
         videoRef.current.play();
+        // Remove the event listener after successful play
+        videoRef.current.removeEventListener('click', handleVideoClick);
       }
-      document.removeEventListener('click', handleClick);
     };
 
-    document.addEventListener('click', handleClick);
+    // Add click listener to the video element only
+    if (videoRef.current) {
+      videoRef.current.addEventListener('click', handleVideoClick);
+    }
+    
     return () => {
-      document.removeEventListener('click', handleClick);
+      if (videoRef.current) {
+        videoRef.current.removeEventListener('click', handleVideoClick);
+      }
     };
   }, []);
 

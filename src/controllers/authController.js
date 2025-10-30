@@ -6,38 +6,55 @@ import AppError from '../utils/appError.js';
 import catchAsync from '../utils/catchAsync.js';
 import { sendEmail } from '../utils/email.js';
 
+// Sign access token
 const signToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN,
+    expiresIn: process.env.JWT_EXPIRES_IN || '15m', // 15 minutes
   });
 };
 
+// Sign refresh token
+const signRefreshToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d', // 7 days
+  });
+};
+
+// Common cookie options
+const getCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+  path: '/',
+  domain: process.env.NODE_ENV === 'production' ? 'yourdomain.com' : 'localhost',
+  partitioned: process.env.NODE_ENV === 'production',
+});
+
 const createSendToken = (user, statusCode, res) => {
   const token = signToken(user._id);
-  const cookieOptions = {
-    expires: new Date(
-      Date.now() + 90 * 24 * 60 * 60 * 1000 // 90 days
-    ),
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    path: '/',
-    domain: process.env.NODE_ENV === 'production' ? 'yourdomain.com' : undefined
-  };
+  const refreshToken = signRefreshToken(user._id);
+  
+  // Set access token cookie
+  res.cookie('jwt', token, {
+    ...getCookieOptions(),
+    expires: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+  });
+  
+  // Set refresh token cookie
+  res.cookie('refreshToken', refreshToken, {
+    ...getCookieOptions(),
+    expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+  });
 
   // Remove password from output
   user.password = undefined;
-
-  // Set the JWT as a cookie
-  res.cookie('jwt', token, cookieOptions);
   
-  // Also send the token in the response body for clients that can't use cookies
+  // Send response with both tokens
   res.status(statusCode).json({
     status: 'success',
     token,
-    data: {
-      user,
-    },
+    refreshToken,
+    data: { user },
   });
 };
 
@@ -90,15 +107,76 @@ const protect = catchAsync(async (req, res, next) => {
     );
   }
 
-  // 2) Verification token
-  const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+  let decoded;
+  let currentUser;
 
-  // 3) Check if user still exists
-  const currentUser = await User.findById(decoded.id);
-  if (!currentUser) {
-    return next(
-      new AppError('The user belonging to this token no longer exists.', 401)
-    );
+  try {
+    // 2) Verify token
+    decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+    
+    // 3) Check if user still exists
+    currentUser = await User.findById(decoded.id);
+    if (!currentUser) {
+      return next(
+        new AppError('The user belonging to this token no longer exists.', 401)
+      );
+    }
+  } catch (error) {
+    // If token is expired, try to refresh it
+    if (error.name === 'TokenExpiredError' && req.cookies.refreshToken) {
+      try {
+        // Get the refresh token from cookies
+        const refreshToken = req.cookies.refreshToken;
+        
+        // Verify the refresh token
+        const refreshDecoded = await promisify(jwt.verify)(
+          refreshToken,
+          process.env.JWT_REFRESH_SECRET
+        );
+        
+        // Get the user from the refresh token
+        currentUser = await User.findById(refreshDecoded.id);
+        if (!currentUser) {
+          return next(
+            new AppError('The user belonging to this token no longer exists.', 401)
+          );
+        }
+        
+        // Generate new tokens
+        const newToken = signToken(currentUser._id);
+        const newRefreshToken = signRefreshToken(currentUser._id);
+        
+        // Set new cookies
+        res.cookie('jwt', newToken, {
+          ...getCookieOptions(),
+          expires: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+        });
+        
+        res.cookie('refreshToken', newRefreshToken, {
+          ...getCookieOptions(),
+          expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        });
+        
+        // Update the decoded token for further processing
+        decoded = { id: currentUser._id };
+        
+        // Set the new token in the request for the next middleware
+        req.token = newToken;
+        
+      } catch (refreshError) {
+        // If refresh token is invalid, clear cookies and ask user to login again
+        res.clearCookie('jwt');
+        res.clearCookie('refreshToken');
+        return next(
+          new AppError('Your session has expired. Please log in again.', 401)
+        );
+      }
+    } else {
+      // For other JWT errors, just forward the error
+      return next(
+        new AppError('Invalid token. Please log in again!', 401)
+      );
+    }
   }
 
   // 4) Check if user changed password after the token was issued
@@ -119,15 +197,70 @@ const isLoggedIn = async (req, res, next) => {
   if (req.cookies.jwt) {
     try {
       // 1) Verify token
-      const decoded = await promisify(jwt.verify)(
-        req.cookies.jwt,
-        process.env.JWT_SECRET
-      );
-
-      // 2) Check if user still exists
-      const currentUser = await User.findById(decoded.id);
-      if (!currentUser) {
-        return next();
+      let decoded;
+      let currentUser;
+      
+      try {
+        decoded = await promisify(jwt.verify)(
+          req.cookies.jwt,
+          process.env.JWT_SECRET
+        );
+        
+        // 2) Check if user still exists
+        currentUser = await User.findById(decoded.id);
+        if (!currentUser) {
+          res.clearCookie('jwt');
+          res.clearCookie('refreshToken');
+          return next();
+        }
+      } catch (error) {
+        // If token is expired, try to refresh it
+        if (error.name === 'TokenExpiredError' && req.cookies.refreshToken) {
+          try {
+            // Verify the refresh token
+            const refreshDecoded = await promisify(jwt.verify)(
+              req.cookies.refreshToken,
+              process.env.JWT_REFRESH_SECRET
+            );
+            
+            // Get the user from the refresh token
+            currentUser = await User.findById(refreshDecoded.id);
+            if (!currentUser) {
+              res.clearCookie('jwt');
+              res.clearCookie('refreshToken');
+              return next();
+            }
+            
+            // Generate new tokens
+            const newToken = signToken(currentUser._id);
+            const newRefreshToken = signRefreshToken(currentUser._id);
+            
+            // Set new cookies
+            res.cookie('jwt', newToken, {
+              ...getCookieOptions(),
+              expires: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+            });
+            
+            res.cookie('refreshToken', newRefreshToken, {
+              ...getCookieOptions(),
+              expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+            });
+            
+            // Update the decoded token
+            decoded = { id: currentUser._id };
+            
+          } catch (refreshError) {
+            // If refresh token is invalid, clear cookies
+            res.clearCookie('jwt');
+            res.clearCookie('refreshToken');
+            return next();
+          }
+        } else {
+          // For other JWT errors, clear cookies and continue
+          res.clearCookie('jwt');
+          res.clearCookie('refreshToken');
+          return next();
+        }
       }
 
       // 3) Check if user changed password after the token was issued
@@ -353,17 +486,65 @@ const getUser = catchAsync(async (req, res, next) => {
   });
 });
 
+// Refresh access token
+const refreshAccessToken = catchAsync(async (req, res, next) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return next(new AppError('Refresh token is required', 400));
+  }
+
+  try {
+    // Verify the refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    
+    // Check if user still exists
+    const currentUser = await User.findById(decoded.id);
+    if (!currentUser) {
+      return next(new AppError('The user belonging to this token no longer exists', 401));
+    }
+
+    // Generate new tokens
+    const newToken = signToken(currentUser._id);
+    const newRefreshToken = signRefreshToken(currentUser._id);
+
+    // Set new cookies
+    res.cookie('jwt', newToken, {
+      ...getCookieOptions(),
+      expires: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+    });
+    
+    res.cookie('refreshToken', newRefreshToken, {
+      ...getCookieOptions(),
+      expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+    });
+
+    // Send response
+    res.status(200).json({
+      status: 'success',
+      token: newToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (err) {
+    if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+      return next(new AppError('Invalid or expired refresh token', 401));
+    }
+    return next(err);
+  }
+});
+
 export {
   signup,
   login,
   logout,
   protect,
-  isLoggedIn,
   restrictTo,
   forgotPassword,
   resetPassword,
   updatePassword,
+  verifyToken,
+  isLoggedIn,
   getMe,
   getUser,
-  verifyToken,
+  refreshAccessToken,
 };

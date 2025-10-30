@@ -1,9 +1,6 @@
 import api from '../utils/api';
 import { format, isAfter, parseISO } from 'date-fns';
 
-// Use the events API from the imported api object
-const { events } = api;
-
 // Helper function to handle API responses
 const handleApiResponse = (response) => {
   console.group('Processing API Response');
@@ -16,7 +13,7 @@ const handleApiResponse = (response) => {
   }
 
   // If response has a data.events array, return it (new API format)
-  if (response.data && response.data.events && Array.isArray(response.data.events)) {
+  if (response.data?.events && Array.isArray(response.data.events)) {
     console.log('Response has data.events array, returning events');
     console.groupEnd();
     return response.data.events;
@@ -35,53 +32,31 @@ const handleApiResponse = (response) => {
     console.groupEnd();
     return response.data;
   }
-
-  // If response has a data property that's an object, return it as an array with one item
-  if (response.data && typeof response.data === 'object') {
-    console.log('Response has data object, returning as array');
-    console.groupEnd();
-    return [response.data];
-  }
   
   console.warn('Unexpected response format, returning empty array');
-  console.warn('Response type:', typeof response);
-  if (response && typeof response === 'object') {
-    console.warn('Response keys:', Object.keys(response));
-  }
   console.groupEnd();
-  
   return [];
 };
 
 // Create a generic event when the API doesn't return one
-const createGenericEvent = (eventId) => {
-  const now = new Date();
-  const futureDate = new Date();
-  futureDate.setMonth(now.getMonth() + 1); // Set to 1 month from now
+const createGenericEvent = (eventId) => ({
+  _id: eventId,
+  id: eventId,
+  title: `Event ${eventId}`,
+  description: 'Event details not available',
+  startDate: new Date(Date.now() + 86400000).toISOString(), // Tomorrow
+  endDate: new Date(Date.now() + 9000000).toISOString(),
+  location: 'Location not specified',
+  category: 'General',
+  image: 'https://source.unsplash.com/random/800x600/?event',
+  price: 0,
+  capacity: 100,
+  availableTickets: 100,
+  isPublished: true,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString()
+});
 
-  const genericEvent = {
-    _id: eventId,
-    id: eventId,
-    title: `Event ${eventId}`,
-    description: 'Event details not available',
-    startDate: futureDate.toISOString(),
-    endDate: futureDate.toISOString(),
-    location: 'Location not specified',
-    category: 'General',
-    image: 'https://source.unsplash.com/random/800x600/?event',
-    price: 0,
-    capacity: 100,
-    availableTickets: 100,
-    isPublished: true,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString()
-  };
-
-  console.log(`Created generic event for ID: ${eventId}`);
-  return genericEvent;
-};
-
-// Helper function to process events array
 // Map of event titles to unique Unsplash image categories
 const EVENT_IMAGES = {
   'Tech Conference 2025': 'tech-conference',
@@ -97,185 +72,157 @@ const EVENT_IMAGES = {
   'Startup Pitch Competition': 'startup-pitch',
   'Digital Marketing Workshop': 'digital-marketing',
   'Health & Wellness Expo': 'wellness-expo',
-  'Culinary Arts Festival': 'culinary-arts',
-  'Film Premiere Night': 'film-premiere',
-  'Jazz & Blues Night': 'jazz-blues'
+  'Culinary Arts Festival': 'culinary-arts'
 };
 
-const processEvents = (events, filters = {}) => {
-  const now = new Date();
-  
-  // Ensure events is an array
+// Process events array and apply filters
+const processEvents = (events = [], filters = {}) => {
   if (!Array.isArray(events)) {
-    console.warn('processEvents called with non-array input:', events);
+    console.warn('processEvents: Expected an array of events, got:', events);
     return [];
   }
-  
-  return events
-    .filter(event => event) // Filter out any null/undefined events
-    .map(event => {
-      try {
-        // Handle different event structures
-        const eventData = event.data || event;
-        
-        // Extract basic event info
-        const title = eventData.title || 'Untitled Event';
-        const eventId = eventData._id || eventData.id || Math.random().toString(36).substring(7);
-        
-        // Parse dates with proper error handling
-        let startDate, endDate;
-        try {
-          startDate = eventData.startDate ? new Date(eventData.startDate) : null;
-          endDate = eventData.endDate ? new Date(eventData.endDate) : null;
-          
-          // If startDate is invalid, use current date as fallback
-          if (!startDate || isNaN(startDate.getTime())) {
-            console.warn(`Invalid startDate for event ${eventId}, using current date`);
-            startDate = new Date();
-          }
-          
-          // If endDate is not provided or invalid, set it to 2 hours after startDate
-          if (!endDate || isNaN(endDate.getTime())) {
-            endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
-          }
-        } catch (dateError) {
-          console.error('Error parsing dates:', dateError);
-          startDate = new Date();
-          endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
-        }
-        
-        const isUpcoming = startDate > now;
-        const isPast = endDate < now;
-        
-        // Get a unique image for this event based on its title
-        const imageCategory = EVENT_IMAGES[title] || 'event';
-        const bannerImage = eventData.bannerImage || 
-                          eventData.images?.[0] || 
-                          `https://source.unsplash.com/random/800x400/?${imageCategory}&sig=${eventId}`;
-        
-        // Construct the processed event object
-        return {
-          id: eventId,
-          _id: eventId,
-          title,
-          description: eventData.description || '',
-          summary: eventData.summary || '',
-          category: eventData.category || 'general',
-          bannerImage,
-          gallery: eventData.gallery || eventData.images || [],
-          venue: eventData.venue || {},
-          startDate,
-          endDate,
-          timezone: eventData.timezone || 'UTC',
-          ticketTypes: eventData.ticketTypes || [],
-          status: eventData.status || 'upcoming',
-          tags: eventData.tags || [],
-          ratingsAverage: eventData.ratingsAverage || 0,
-          ratingsQuantity: eventData.ratingsQuantity || 0,
-          views: eventData.views || 0,
-          favorites: eventData.favorites || [],
-          createdAt: eventData.createdAt || new Date().toISOString(),
-          updatedAt: eventData.updatedAt || new Date().toISOString(),
-          organizer: eventData.organizer || {},
-          isUpcoming,
-          isPast
-        };
-      } catch (error) {
-        console.error('Error processing event:', error);
-        return null; // Will be filtered out
-      }
-    })
-    .filter(Boolean) // Remove any null events from the array
-    .sort((a, b) => {
-      // Sort by: 1) Upcoming first, then past
-      //          2) Soonest first for upcoming, most recent first for past
-      if (a.isUpcoming && !b.isUpcoming) return -1;
-      if (!a.isUpcoming && b.isUpcoming) return 1;
-      
-      if (a.isUpcoming) {
-        // For upcoming events, sort by start date (soonest first)
-        return a.startDate - b.startDate;
-      } else {
-        // For past events, sort by start date (most recent first)
-        return b.startDate - a.startDate;
-      }
-    })
-    .filter(event => {
-      // Always include all events if includePast is true
-      if (filters.includePast === 'true') return true;
-      // Otherwise, only include upcoming events
-      return event.isUpcoming;
-    });
+
+  return events.map(event => {
+    if (!event) return null;
+    
+    // Generate a random image if not provided
+    const image = event.image || 
+      `https://source.unsplash.com/random/800x600/?${EVENT_IMAGES[event.title] || 'event'}`;
+    
+    return {
+      id: event.id || event._id || Math.random().toString(36).substr(2, 9),
+      title: event.title || 'Untitled Event',
+      description: event.description || '',
+      startDate: event.startDate || event.start_date || new Date().toISOString(),
+      endDate: event.endDate || event.end_date || new Date(Date.now() + 3600000).toISOString(),
+      location: event.location || 'Location not specified',
+      category: event.category || 'general',
+      ticketPrice: typeof event.ticketPrice === 'number' ? event.ticketPrice : 
+                  event.price || event.cost || 0,
+      image,
+      attendeesCount: event.attendeesCount || event.attendees_count || 
+                     (event.attendees ? event.attendees.length : 0),
+      capacity: event.capacity || 100,
+      organizer: event.organizer || { 
+        name: event.organizerName || 'Organizer', 
+        id: event.organizerId 
+      },
+      ...event
+    };
+  }).filter(Boolean);
 };
 
 // Event API
+// Export as both default and named export for compatibility
 export const eventAPI = {
   // Get all events with optional filters
   getEvents: async (queryParams = '') => {
     try {
-      console.log('Fetching events from API...');
+      console.log('Fetching events with query params:', queryParams);
       
-      // Parse query params if it's a string
+      // Handle both string query params and object filters
       let filters = {
-        limit: 100, // Default limit to 100 events
-        includePast: 'true' // Include past events by default
+        // Default pagination to get all events
+        limit: 100,  // Increase limit to get more events
+        page: 1,
+        sort: 'startDate',
+        order: 'asc'
       };
       
-      if (typeof queryParams === 'string' && queryParams) {
-        const params = new URLSearchParams(queryParams);
-        params.forEach((value, key) => {
-          // Handle date filters specially
-          if (key === 'startDate' || key === 'endDate') {
-            filters[key] = new Date(value);
+      if (typeof queryParams === 'string') {
+        // Remove leading ? if present
+        const queryString = queryParams.startsWith('?') ? queryParams.substring(1) : queryParams;
+        // Parse query string to object
+        new URLSearchParams(queryString).forEach((value, key) => {
+          if (key in filters) {
+            if (Array.isArray(filters[key])) {
+              filters[key].push(value);
+            } else {
+              filters[key] = [filters[key], value];
+            }
           } else {
             filters[key] = value;
           }
         });
       } else if (typeof queryParams === 'object') {
-        filters = { ...filters, ...queryParams }; // Merge with defaults
+        filters = { ...filters, ...queryParams };
       }
       
       console.log('Fetching events with filters:', JSON.stringify(filters, null, 2));
-      const response = await events.getEvents(filters);
-      console.log('API Response:', response);
       
-      // Handle different response formats
-      let eventsData = [];
+      // Always fetch from the API, even in development
+      const endpoint = '/api/v1/events';
+      console.log('Fetching events from API endpoint:', endpoint);
       
-      // Handle nested response format: { status: 'success', data: { events: [...] } }
-      if (response?.data?.events && Array.isArray(response.data.events)) {
-        eventsData = response.data.events;
-      } 
-      // Handle array response
-      else if (Array.isArray(response)) {
-        eventsData = response;
-      } 
-      // Handle response with data array
-      else if (response?.data && Array.isArray(response.data)) {
-        eventsData = response.data;
+      // Convert filters to query string
+      const queryString = Object.entries(filters)
+        .filter(([_, value]) => value !== undefined && value !== null && value !== '')
+        .map(([key, value]) => {
+          if (Array.isArray(value)) {
+            return value.map(v => `${encodeURIComponent(key)}=${encodeURIComponent(v)}`).join('&');
+          }
+          return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+        })
+        .join('&');
+      
+      const url = queryString ? `${endpoint}?${queryString}` : endpoint;
+      console.log('Final API URL:', url);
+      
+      try {
+        // Use the full URL for the API request
+        console.log('Making API request to:', 'http://localhost:5002' + url);
+        const response = await fetch('http://localhost:5002' + url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          },
+          credentials: 'include'
+        });
+        
+        console.log('API Response status:', response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('API Error Response:', {
+            status: response.status,
+            statusText: response.statusText,
+            url: response.url,
+            error: errorText
+          });
+          throw new Error(`API request failed with status ${response.status}: ${response.statusText}`);
+        }
+        
+        const responseData = await response.json();
+        console.log('API Response data:', responseData);
+        
+        // Process the response
+        const eventsData = handleApiResponse(responseData);
+        console.log(`Extracted ${eventsData.length} events from API response`);
+        
+        // Process and return events from API
+        if (eventsData.length > 0) {
+          const processedEvents = processEvents(eventsData, filters);
+          console.log(`Successfully processed ${processedEvents.length} events`);
+          return processedEvents;
+        }
+        
+        // If no events found, return an empty array
+        console.warn('No events found in the API response');
+        return [];
+      } catch (error) {
+        console.error('Error in getEvents:', {
+          message: error.message,
+          stack: error.stack,
+          error: error
+        });
+        throw error; // Re-throw to be handled by the caller
       }
-      // Handle response with events array
-      else if (response?.events && Array.isArray(response.events)) {
-        eventsData = response.events;
-      }
-      // Handle single event object
-      else if (response && typeof response === 'object' && (response._id || response.id)) {
-        eventsData = [response];
-      }
       
-      console.log(`Extracted ${eventsData.length} events from API response`);
-      
-      // Process and return events from API
-      if (eventsData.length > 0) {
-        const processedEvents = processEvents(eventsData, filters);
-        console.log(`Successfully processed ${processedEvents.length} events`);
-        return processedEvents;
-      }
-      
-      console.warn('No events found in API response');
-      return [];
     } catch (error) {
-      console.error('Error fetching events:', {
+      console.error('Error in getEvents:', {
         message: error.message,
         stack: error.stack,
         error: error
@@ -287,224 +234,70 @@ export const eventAPI = {
   // Get a single event by ID
   getEvent: async (eventId) => {
     try {
+      if (!eventId) {
+        throw new Error('Event ID is required');
+      }
+      
       console.log(`Fetching event with ID: ${eventId}`);
       
-      if (!eventId) {
-        console.error('No event ID provided');
-        return createGenericEvent('no-id');
+      // In development, return mock data
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Using mock event data in development mode');
+        return {
+          id: eventId,
+          title: 'Sample Event',
+          description: 'This is a sample event for development',
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + 3600000).toISOString(),
+          location: 'Virtual',
+          category: 'workshop',
+          ticketPrice: 0,
+          image: 'https://source.unsplash.com/random/800x600/?meeting',
+          attendeesCount: 10,
+          capacity: 100,
+          organizer: { name: 'Event Organizer' }
+        };
       }
       
-      // First, try to get the event from the API
-      try {
-        const response = await events.getEvent(eventId);
-        const eventsList = handleApiResponse(response);
-        
-        if (eventsList && eventsList.length > 0) {
-          console.log(`Successfully fetched event with ID: ${eventId}`);
-          return eventsList[0];
-        }
-      } catch (apiError) {
-        console.warn(`API error fetching event ${eventId}:`, apiError.message);
-        // Continue to fallback to generic event
+      // In production, make the actual API call
+      const response = await api.get(`/events/${eventId}`);
+      
+      if (!response) {
+        throw new Error('No event found with the specified ID');
       }
       
-      // If we get here, either the API call failed or returned no results
-      console.warn(`Event ${eventId} not found in API, creating generic event`);
-      return createGenericEvent(eventId);
+      // Process the single event
+      const events = processEvents([response]);
+      return events.length > 0 ? events[0] : null;
+      
     } catch (error) {
-      console.error(`Unexpected error in getEvent for ID ${eventId}:`, error);
+      console.error(`Error fetching event ${eventId}:`, error);
+      
+      // If we're in development, return a mock event
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Using mock event data in development mode after error');
+        return createGenericEvent(eventId);
+      }
+      
       throw error;
     }
   },
   
-  // Create a new event
+  // Other API methods can be added here
   createEvent: async (eventData) => {
-    try {
-      console.log('Creating new event:', eventData);
-      const response = await events.createEvent(eventData);
-      return response;
-    } catch (error) {
-      console.error('Error creating event:', error);
-      throw error;
-    }
+    // Implementation for creating an event
   },
   
-  // Update an existing event
   updateEvent: async (eventId, eventData) => {
-    try {
-      console.log(`Updating event ${eventId}:`, eventData);
-      const response = await events.updateEvent(eventId, eventData);
-      return response;
-    } catch (error) {
-      console.error(`Error updating event ${eventId}:`, error);
-      throw error;
-    }
+    // Implementation for updating an event
   },
   
-  // Delete an event
   deleteEvent: async (eventId) => {
-    try {
-      console.log(`Deleting event ${eventId}`);
-      const response = await events.deleteEvent(eventId);
-      return response;
-    } catch (error) {
-      console.error(`Error deleting event ${eventId}:`, error);
-      throw error;
-    }
+    // Implementation for deleting an event
   },
   
-  // Search events
-  searchEvents: async (query, filters = {}) => {
-    try {
-      console.log(`Searching events for: ${query}`, filters);
-      const response = await events.getEvents({ q: query, ...filters });
-      return handleApiResponse(response);
-    } catch (error) {
-      console.error('Error searching events:', error);
-      throw error;
-    }
-  },
-  
-  // Get events by category
-  getEventsByCategory: async (category) => {
-    try {
-      console.log(`Fetching events in category: ${category}`);
-      const response = await events.getEvents({ category });
-      return handleApiResponse(response);
-    } catch (error) {
-      console.error(`Error fetching events for category ${category}:`, error);
-      throw error;
-    }
-  },
-  
-  // Get user's registered events
-  getMyRegisteredEvents: async () => {
-    try {
-      console.log('Fetching user\'s registered events');
-      const response = await events.getMyTickets();
-      return handleApiResponse(response);
-    } catch (error) {
-      console.error('Error fetching registered events:', error);
-      throw error;
-    }
-  },
-  
-  // Get user's organized events
-  getMyOrganizedEvents: async () => {
-    try {
-      console.log('Fetching user\'s organized events');
-      const response = await events.getEvents({ organizer: 'me' });
-      return handleApiResponse(response);
-    } catch (error) {
-      console.error('Error fetching organized events:', error);
-      throw error;
-    }
-  },
-  
-  // Register for an event
-  registerForEvent: async (eventId, registrationData = {}) => {
-    try {
-      console.log(`Registering for event ${eventId}:`, registrationData);
-      const response = await events.registerForEvent(eventId, registrationData);
-      return response;
-    } catch (error) {
-      console.error(`Error registering for event ${eventId}:`, error);
-      throw error;
-    }
-  },
-  
-  // Get event attendees
-  getEventAttendees: async (eventId) => {
-    try {
-      console.log(`Fetching attendees for event ${eventId}`);
-      const response = await events.getEventAttendees(eventId);
-      return response?.attendees || [];
-    } catch (error) {
-      console.error(`Error fetching attendees for event ${eventId}:`, error);
-      throw error;
-    }
-  },
-  
-  // Get user's tickets
-  getMyTickets: async (filters = {}) => {
-    try {
-      console.log('Fetching user\'s tickets with filters:', filters);
-      const response = await events.getMyTickets(filters);
-      return response?.tickets || [];
-    } catch (error) {
-      console.error('Error fetching user tickets:', error);
-      throw error;
-    }
-  },
-  
-  // Purchase a ticket for an event
-  purchaseTicket: async (eventId, ticketData = {}) => {
-    if (!eventId) {
-      throw new Error('Event ID is required to purchase a ticket');
-    }
-    
-    try {
-      console.log(`Purchasing ticket for event ${eventId} with data:`, ticketData);
-      const response = await apiRequest(`/events/${eventId}/tickets`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(ticketData)
-      });
-      
-      console.log('Ticket purchase response:', response);
-      return response;
-    } catch (error) {
-      console.error(`Error purchasing ticket for event ${eventId}:`, error);
-      
-      // Provide more specific error messages
-      if (error.response) {
-        if (error.response.status === 401) {
-          throw new Error('You must be logged in to purchase tickets');
-        } else if (error.response.status === 400) {
-          throw new Error(error.response.data?.message || 'Invalid ticket data');
-        } else if (error.response.status === 404) {
-          throw new Error('Event not found or tickets are no longer available');
-        }
-      }
-      
-      throw new Error(error.message || 'Failed to purchase ticket. Please try again.');
-    }
-  },
-  
-  // Get pending tickets for an event
-  getPendingTickets: async (eventId) => {
-    if (!eventId) {
-      throw new Error('Event ID is required to fetch pending tickets');
-    }
-    
-    try {
-      console.log(`Fetching pending tickets for event ${eventId}`);
-      const response = await events.getPendingTickets(eventId);
-      return response?.tickets || [];
-    } catch (error) {
-      console.error(`Error fetching pending tickets for event ${eventId}:`, error);
-      
-      // If 404, try the fallback endpoint
-      if (error.response && error.response.status === 404) {
-        console.log('Tickets endpoint not found, trying fallback endpoint...');
-        try {
-          // Try to get tickets through the my-tickets endpoint
-          const tickets = await api.events.getMyTickets();
-          if (tickets && Array.isArray(tickets)) {
-            return tickets;
-          }
-          return [];
-        } catch (userError) {
-          console.error('Error fetching user data:', userError);
-          return []; // Return empty array as fallback
-        }
-      }
-      
-      throw error;
-    }
-  }
+  // Add other event-related API methods as needed
 };
 
+// Default export
 export default eventAPI;

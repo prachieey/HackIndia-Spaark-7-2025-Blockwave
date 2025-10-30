@@ -1,0 +1,160 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - region "Notifications Alt+T":
+    - generic [ref=e3]:
+      - alert [ref=e4] [cursor=pointer]:
+        - img [ref=e6]
+        - text: Network error
+        - button "close" [ref=e8]:
+          - img [ref=e9]
+        - generic [ref=e11]:
+          - progressbar "notification timer"
+      - alert [ref=e13] [cursor=pointer]:
+        - img [ref=e15]
+        - text: Network error
+        - button "close" [ref=e17]:
+          - img [ref=e18]
+        - generic [ref=e20]:
+          - progressbar "notification timer"
+  - generic [ref=e22]:
+    - banner [ref=e47]:
+      - generic [ref=e49]:
+        - link "Scantyx PRO" [ref=e51] [cursor=pointer]:
+          - /url: /
+          - img [ref=e53]
+          - generic [ref=e59]: Scantyx
+          - generic [ref=e60]: PRO
+        - navigation [ref=e61]:
+          - link "Home" [ref=e62] [cursor=pointer]:
+            - /url: /
+          - link "Explore" [ref=e63] [cursor=pointer]:
+            - /url: /explore
+          - link "Resell" [ref=e64] [cursor=pointer]:
+            - /url: /resell
+          - link "About" [ref=e65] [cursor=pointer]:
+            - /url: /about
+        - generic [ref=e67]:
+          - link "Log in" [ref=e68] [cursor=pointer]:
+            - /url: /login
+          - link "Sign up" [ref=e69] [cursor=pointer]:
+            - /url: /login?mode=signup
+    - generic [ref=e70]:
+      - main [ref=e71]:
+        - generic [ref=e78]:
+          - generic [ref=e79]:
+            - heading "Create Account" [level=1] [ref=e80]
+            - paragraph [ref=e81]: Get started with your account today
+          - generic [ref=e83]:
+            - img [ref=e85]
+            - paragraph [ref=e88]: Network error
+          - generic [ref=e89]:
+            - generic [ref=e90]:
+              - text: Full Name
+              - textbox "Full Name" [ref=e92]:
+                - /placeholder: John Doe
+                - text: mkd
+            - generic [ref=e94]:
+              - text: Email
+              - textbox "Email" [ref=e96]:
+                - /placeholder: you@example.com
+                - text: nik@gmail.com
+            - generic [ref=e98]:
+              - generic [ref=e100]: Password
+              - textbox "Password" [ref=e102]:
+                - /placeholder: Create a password
+                - text: ndcnckjdn@12A
+            - button "Create Account" [ref=e105] [cursor=pointer]:
+              - generic [ref=e106]: Create Account
+            - generic [ref=e108]:
+              - text: Already have an account?
+              - button "Sign in" [ref=e109] [cursor=pointer]
+          - generic [ref=e111]:
+            - generic [ref=e116]: Or continue with
+            - generic [ref=e117]:
+              - button [ref=e118] [cursor=pointer]:
+                - img [ref=e119]
+              - button [ref=e124] [cursor=pointer]:
+                - img [ref=e125]
+              - button [ref=e127] [cursor=pointer]:
+                - img [ref=e128]
+          - paragraph [ref=e131]:
+            - text: By creating an account, you agree to our
+            - link "Terms of Service" [ref=e132] [cursor=pointer]:
+              - /url: /terms
+            - text: and
+            - link "Privacy Policy" [ref=e133] [cursor=pointer]:
+              - /url: /privacy
+      - contentinfo [ref=e134]:
+        - generic [ref=e135]:
+          - generic [ref=e136]:
+            - generic [ref=e137]:
+              - link "Scantyx" [ref=e138] [cursor=pointer]:
+                - /url: /
+                - img [ref=e139]
+                - generic [ref=e145]: Scantyx
+              - paragraph [ref=e146]: No Scams, Just Scans
+              - paragraph [ref=e147]: Blockchain-powered event security with dynamic QR codes. Making events safer and more accessible.
+            - generic [ref=e148]:
+              - heading "Quick Links" [level=3] [ref=e149]
+              - list [ref=e150]:
+                - listitem [ref=e151]:
+                  - link "Home" [ref=e152] [cursor=pointer]:
+                    - /url: /
+                - listitem [ref=e153]:
+                  - link "Explore Events" [ref=e154] [cursor=pointer]:
+                    - /url: /explore
+                - listitem [ref=e155]:
+                  - link "Demo" [ref=e156] [cursor=pointer]:
+                    - /url: /demo
+                - listitem [ref=e157]:
+                  - link "Contact Us" [ref=e158] [cursor=pointer]:
+                    - /url: /contact
+            - generic [ref=e159]:
+              - heading "Legal" [level=3] [ref=e160]
+              - list [ref=e161]:
+                - listitem [ref=e162]:
+                  - link "Terms of Service" [ref=e163] [cursor=pointer]:
+                    - /url: /login
+                - listitem [ref=e164]:
+                  - link "Privacy Policy" [ref=e165] [cursor=pointer]:
+                    - /url: /login
+                - listitem [ref=e166]:
+                  - link "Cookie Policy" [ref=e167] [cursor=pointer]:
+                    - /url: /login
+            - generic [ref=e168]:
+              - heading "Connect With Us" [level=3] [ref=e169]
+              - generic [ref=e170]:
+                - link [ref=e171] [cursor=pointer]:
+                  - /url: "#"
+                  - img [ref=e172]
+                - link [ref=e174] [cursor=pointer]:
+                  - /url: "#"
+                  - img [ref=e175]
+                - link [ref=e177] [cursor=pointer]:
+                  - /url: "#"
+                  - img [ref=e178]
+                - link [ref=e181] [cursor=pointer]:
+                  - /url: "#"
+                  - img [ref=e182]
+          - paragraph [ref=e187]: © 2025 Scantyx. All rights reserved.
+    - region "Notifications Alt+T":
+      - generic [ref=e188]:
+        - alert [ref=e189] [cursor=pointer]:
+          - img [ref=e191]
+          - text: Network error
+          - button "close" [ref=e193]:
+            - img [ref=e194]
+          - generic [ref=e196]:
+            - progressbar "notification timer"
+        - alert [ref=e198] [cursor=pointer]:
+          - img [ref=e200]
+          - text: Network error
+          - button "close" [ref=e202]:
+            - img [ref=e203]
+          - generic [ref=e205]:
+            - progressbar "notification timer"
+  - region "Notifications Alt+T"
+  - region "Notifications Alt+T"
+```

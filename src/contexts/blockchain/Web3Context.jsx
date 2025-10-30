@@ -1,9 +1,9 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { ethers } from 'ethers';
 import EventTicketABI from '../../../artifacts/contracts/EventTicket.sol/EventTicket.json';
 import { toast } from 'react-toastify';
 
-const Web3Context = createContext();
+export const Web3Context = createContext();
 const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
 export const Web3Provider = ({ children }) => {
@@ -172,4 +172,27 @@ export const Web3Provider = ({ children }) => {
   );
 };
 
-export const useWeb3 = () => useContext(Web3Context);
+// Export a more resilient version of useWeb3 that won't throw if context is not available
+export const useWeb3 = () => {
+  try {
+    const context = useContext(Web3Context);
+    if (context === undefined) {
+      console.warn('useWeb3 must be used within a Web3Provider');
+      return {
+        isConnected: false,
+        connectWallet: () => console.warn('Web3 not initialized'),
+        disconnectWallet: () => {},
+        // Add other default values as needed
+      };
+    }
+    return context;
+  } catch (error) {
+    console.warn('Error accessing Web3 context:', error);
+    return {
+      isConnected: false,
+      connectWallet: () => console.warn('Web3 not available'),
+      disconnectWallet: () => {},
+      // Add other default values as needed
+    };
+  }
+};

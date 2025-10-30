@@ -8,7 +8,7 @@ import { connectDB } from './src/config/database-connection.js';
 dotenv.config();
 
 // Set default port
-const PORT = process.env.PORT || 5002;
+const PORT = process.env.BACKEND_PORT || 3000;
 
 // WebSocket server setup
 const server = http.createServer(app);

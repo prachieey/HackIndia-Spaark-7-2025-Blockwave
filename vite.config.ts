@@ -58,13 +58,14 @@ export default defineConfig({
     headers: {
       'Content-Security-Policy': [
         "default-src 'self';",
-        "connect-src 'self' https://api.emailjs.com http://localhost:* https://localhost:* ws://localhost:* wss://localhost:* http://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:*;",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval';",
-        "style-src 'self' 'unsafe-inline';",
-        "img-src 'self' data: blob: https:;",
-        "font-src 'self' data:;",
-        "frame-src 'self';",
-        "object-src 'none';"
+        "connect-src 'self' https://api.emailjs.com http://localhost:* https://localhost:* ws://localhost:* wss://localhost:* http://127.0.0.1:* ws://127.0.0.1:* wss://127.0.0.1:* https://identitytoolkit.googleapis.com https://*.firebaseio.com https://*.googleapis.com https://*.firebase.com;",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://www.gstatic.com https://apis.google.com https://*.firebase.com https://*.google-analytics.com https://*.firebaseinstallations.googleapis.com https://*.gstatic.com https://*.google.com https://www.gstatic.com/firebasejs/ https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/;",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.googleapis.com https://fonts.gstatic.com;",
+        "img-src 'self' data: blob: https: https://*.googleapis.com https://*.google.com https://*.firebase.com https://*.gstatic.com https://www.google.com https://www.gstatic.com;",
+        "font-src 'self' data: https://fonts.gstatic.com https://fonts.googleapis.com;",
+        "frame-src 'self' https://www.google.com https://www.recaptcha.net https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/;",
+        "object-src 'none';",
+        "form-action 'self' https://identitytoolkit.googleapis.com;"
       ].join(' ')
     },
     proxy: proxyConfig,

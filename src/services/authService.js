@@ -1,4 +1,4 @@
-import http from './httpService';
+import http, { setAuthTokens, clearAuthTokens } from './httpService';
 import { API_BASE_URL } from '../config';
 
 const apiEndpoint = '/auth';
@@ -6,9 +6,10 @@ const apiEndpoint = '/auth';
 // Get current user from localStorage
 export function getCurrentUser() {
   try {
-    const user = localStorage.getItem('user');
+    const user = localStorage.getItem('scantyx_user');
     return user ? JSON.parse(user) : null;
   } catch (ex) {
+    console.error('Error getting current user:', ex);
     return null;
   }
 }
@@ -16,51 +17,106 @@ export function getCurrentUser() {
 // Login user
 export async function login(email, password) {
   try {
-    const { data } = await http.post(`${apiEndpoint}/login`, { email, password });
+    console.log('Attempting login with:', { email });
     
-    if (data.token) {
-      // Store token in multiple locations for redundancy
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('auth_token', data.token);
-      document.cookie = `token=${data.token}; path=/; max-age=86400`; // 24 hours
+    const response = await http.post(`${apiEndpoint}/login`, { email, password });
+    console.log('Login response:', response);
+    
+    const { token, refreshToken, user } = response.data;
+    
+    if (token && user) {
+      console.log('Login successful, storing tokens');
+      // Store tokens using the correct keys
+      setAuthTokens(token, refreshToken);
       
       // Store user data
-      if (data.user) {
-        localStorage.setItem('user', JSON.stringify(data.user));
-      }
+      localStorage.setItem('scantyx_user', JSON.stringify(user));
       
-      console.log('Login successful, token stored');
-    } else {
-      console.warn('Login successful but no token received');
+      console.log('Login successful, tokens stored');
+      return { token, refreshToken, user };
     }
     
-    return data;
+    console.error('Invalid response format from server:', response);
+    throw new Error('Invalid response from server: Missing token or user data');
   } catch (error) {
-    console.error('Login failed:', error);
+    console.error('Login failed with error:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      response: error.response ? {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data
+      } : 'No response data',
+      stack: error.stack
+    });
+    
     // Clear any partial auth data on error
-    logout();
-    throw error;
+    if (typeof clearAuthTokens === 'function') {
+      clearAuthTokens();
+    }
+    localStorage.removeItem('scantyx_user');
+    
+    // Check if this is a connection error
+    if (error.code === 'ERR_NETWORK') {
+      throw new Error('Unable to connect to the server. Please check your internet connection.');
+    }
+    
+    // Extract and throw a more user-friendly error message
+    let errorMessage = 'Login failed. Please check your credentials.';
+    
+    if (error.response) {
+      // Handle specific HTTP error statuses
+      if (error.response.status === 401) {
+        errorMessage = 'Invalid email or password. Please try again.';
+      } else if (error.response.status >= 500) {
+        errorMessage = 'Server error occurred. Please try again later.';
+      } else if (error.response.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+    }
+    
+    throw new Error(errorMessage);
   }
 }
 
 // Logout user
 export function logout() {
-  // Clear all auth tokens from localStorage
-  localStorage.removeItem('token');
-  localStorage.removeItem('auth_token');
-  localStorage.removeItem('user');
-  
-  // Clear auth cookies
-  document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-  document.cookie = 'jwt=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+  // Clear all auth data
+  clearAuthTokens();
+  localStorage.removeItem('scantyx_user');
   
   console.log('User logged out and all auth data cleared');
+  return Promise.resolve();
 }
 
 // Register new user
 export async function register(userData) {
-  const { data } = await http.post(`${apiEndpoint}/register`, userData);
-  return data;
+  try {
+    const response = await http.post(`${apiEndpoint}/register`, userData);
+    const { token, refreshToken, user } = response.data;
+    
+    if (token && user) {
+      // Store tokens using the correct keys
+      setAuthTokens(token, refreshToken);
+      
+      // Store user data
+      localStorage.setItem('scantyx_user', JSON.stringify(user));
+      
+      console.log('Registration successful, tokens stored');
+      return { token, refreshToken, user };
+    }
+    
+    throw new Error('Invalid response from server');
+  } catch (error) {
+    console.error('Registration failed:', error);
+    // Clear any partial auth data on error
+    clearAuthTokens();
+    
+    // Extract and throw a more user-friendly error message
+    const errorMessage = error.response?.data?.message || 'Registration failed. Please try again.';
+    throw new Error(errorMessage);
+  }
 }
 
 // Get user profile

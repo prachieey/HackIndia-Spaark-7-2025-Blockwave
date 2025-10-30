@@ -1,0 +1,196 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - region "Notifications Alt+T":
+    - generic [ref=e3]:
+      - alert [ref=e4] [cursor=pointer]:
+        - img [ref=e6]
+        - text: Incorrect email or password
+        - button "close" [ref=e8]:
+          - img [ref=e9]
+        - progressbar "notification timer" [ref=e13]
+      - alert [ref=e14] [cursor=pointer]:
+        - img [ref=e16]
+        - text: A server error occurred. Please try again later.
+        - button "close" [ref=e18]:
+          - img [ref=e19]
+        - progressbar "notification timer" [ref=e23]
+      - alert [ref=e24] [cursor=pointer]:
+        - img [ref=e26]
+        - text: Incorrect email or password
+        - button "close" [ref=e28]:
+          - img [ref=e29]
+        - progressbar "notification timer" [ref=e33]
+      - alert [ref=e34] [cursor=pointer]:
+        - img [ref=e36]
+        - text: Incorrect email or password
+        - button "close" [ref=e38]:
+          - img [ref=e39]
+        - progressbar "notification timer" [ref=e43]
+  - generic [ref=e44]:
+    - banner [ref=e69]:
+      - generic [ref=e71]:
+        - link "Scantyx PRO" [ref=e73] [cursor=pointer]:
+          - /url: /
+          - img [ref=e75]
+          - generic [ref=e81]: Scantyx
+          - generic [ref=e82]: PRO
+        - navigation [ref=e83]:
+          - link "Home" [ref=e84] [cursor=pointer]:
+            - /url: /
+          - link "Explore" [ref=e85] [cursor=pointer]:
+            - /url: /explore
+          - link "Resell" [ref=e86] [cursor=pointer]:
+            - /url: /resell
+          - link "About" [ref=e87] [cursor=pointer]:
+            - /url: /about
+        - generic [ref=e89]:
+          - link "Log in" [ref=e90] [cursor=pointer]:
+            - /url: /login
+          - link "Sign up" [ref=e91] [cursor=pointer]:
+            - /url: /login?mode=signup
+    - generic [ref=e92]:
+      - main [ref=e93]:
+        - generic [ref=e100]:
+          - generic [ref=e101]:
+            - heading "Welcome Back" [level=1] [ref=e102]
+            - paragraph [ref=e103]: Sign in to continue to your account
+          - generic [ref=e105]:
+            - img [ref=e107]
+            - paragraph [ref=e110]: Incorrect email or password
+          - generic [ref=e111]:
+            - generic [ref=e112]:
+              - text: Email
+              - textbox "Email" [ref=e114]:
+                - /placeholder: you@example.com
+                - text: invalid@example.com
+            - generic [ref=e116]:
+              - generic [ref=e117]:
+                - generic [ref=e118]: Password
+                - link "Forgot password?" [ref=e119] [cursor=pointer]:
+                  - /url: /forgot-password
+              - textbox "Password" [ref=e121]:
+                - /placeholder: Enter your password
+                - text: wrongpassword
+            - button "Sign In" [ref=e124] [cursor=pointer]:
+              - generic [ref=e125]: Sign In
+            - generic [ref=e127]:
+              - text: Don't have an account?
+              - button "Sign up" [ref=e128] [cursor=pointer]
+          - generic [ref=e130]:
+            - generic [ref=e135]: Or continue with
+            - generic [ref=e136]:
+              - button [ref=e137] [cursor=pointer]:
+                - img [ref=e138]
+              - button [ref=e143] [cursor=pointer]:
+                - img [ref=e144]
+              - button [ref=e146] [cursor=pointer]:
+                - img [ref=e147]
+      - contentinfo [ref=e149]:
+        - generic [ref=e150]:
+          - generic [ref=e151]:
+            - generic [ref=e152]:
+              - link "Scantyx" [ref=e153] [cursor=pointer]:
+                - /url: /
+                - img [ref=e154]
+                - generic [ref=e160]: Scantyx
+              - paragraph [ref=e161]: No Scams, Just Scans
+              - paragraph [ref=e162]: Blockchain-powered event security with dynamic QR codes. Making events safer and more accessible.
+            - generic [ref=e163]:
+              - heading "Quick Links" [level=3] [ref=e164]
+              - list [ref=e165]:
+                - listitem [ref=e166]:
+                  - link "Home" [ref=e167] [cursor=pointer]:
+                    - /url: /
+                - listitem [ref=e168]:
+                  - link "Explore Events" [ref=e169] [cursor=pointer]:
+                    - /url: /explore
+                - listitem [ref=e170]:
+                  - link "Demo" [ref=e171] [cursor=pointer]:
+                    - /url: /demo
+                - listitem [ref=e172]:
+                  - link "Contact Us" [ref=e173] [cursor=pointer]:
+                    - /url: /contact
+            - generic [ref=e174]:
+              - heading "Legal" [level=3] [ref=e175]
+              - list [ref=e176]:
+                - listitem [ref=e177]:
+                  - link "Terms of Service" [ref=e178] [cursor=pointer]:
+                    - /url: /login
+                - listitem [ref=e179]:
+                  - link "Privacy Policy" [ref=e180] [cursor=pointer]:
+                    - /url: /login
+                - listitem [ref=e181]:
+                  - link "Cookie Policy" [ref=e182] [cursor=pointer]:
+                    - /url: /login
+            - generic [ref=e183]:
+              - heading "Connect With Us" [level=3] [ref=e184]
+              - generic [ref=e185]:
+                - link [ref=e186] [cursor=pointer]:
+                  - /url: "#"
+                  - img [ref=e187]
+                - link [ref=e189] [cursor=pointer]:
+                  - /url: "#"
+                  - img [ref=e190]
+                - link [ref=e192] [cursor=pointer]:
+                  - /url: "#"
+                  - img [ref=e193]
+                - link [ref=e196] [cursor=pointer]:
+                  - /url: "#"
+                  - img [ref=e197]
+          - paragraph [ref=e202]: © 2025 Scantyx. All rights reserved.
+    - region "Notifications Alt+T":
+      - generic [ref=e203]:
+        - alert [ref=e204] [cursor=pointer]:
+          - img [ref=e206]
+          - text: Incorrect email or password
+          - button "close" [ref=e208]:
+            - img [ref=e209]
+          - progressbar "notification timer" [ref=e213]
+        - alert [ref=e214] [cursor=pointer]:
+          - img [ref=e216]
+          - text: A server error occurred. Please try again later.
+          - button "close" [ref=e218]:
+            - img [ref=e219]
+          - progressbar "notification timer" [ref=e223]
+        - alert [ref=e224] [cursor=pointer]:
+          - img [ref=e226]
+          - text: Incorrect email or password
+          - button "close" [ref=e228]:
+            - img [ref=e229]
+          - progressbar "notification timer" [ref=e233]
+        - alert [ref=e234] [cursor=pointer]:
+          - img [ref=e236]
+          - text: Incorrect email or password
+          - button "close" [ref=e238]:
+            - img [ref=e239]
+          - progressbar "notification timer" [ref=e243]
+  - region "Notifications Alt+T":
+    - generic [ref=e244]:
+      - alert [ref=e245] [cursor=pointer]:
+        - img [ref=e247]
+        - text: Incorrect email or password
+        - button "close" [ref=e249]:
+          - img [ref=e250]
+        - progressbar "notification timer" [ref=e254]
+      - alert [ref=e255] [cursor=pointer]:
+        - img [ref=e257]
+        - text: A server error occurred. Please try again later.
+        - button "close" [ref=e259]:
+          - img [ref=e260]
+        - progressbar "notification timer" [ref=e264]
+      - alert [ref=e265] [cursor=pointer]:
+        - img [ref=e267]
+        - text: Incorrect email or password
+        - button "close" [ref=e269]:
+          - img [ref=e270]
+        - progressbar "notification timer" [ref=e274]
+      - alert [ref=e275] [cursor=pointer]:
+        - img [ref=e277]
+        - text: Incorrect email or password
+        - button "close" [ref=e279]:
+          - img [ref=e280]
+        - progressbar "notification timer" [ref=e284]
+  - region "Notifications Alt+T"
+```

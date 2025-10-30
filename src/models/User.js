@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import validator from 'validator';
+import jwt from 'jsonwebtoken';
 
 const userSchema = new mongoose.Schema(
   {
@@ -118,11 +119,31 @@ userSchema.pre(/^find/, function (next) {
 });
 
 // Instance methods
-userSchema.methods.correctPassword = async function (
-  candidatePassword,
-  userPassword
-) {
-  return await bcrypt.compare(candidatePassword, userPassword);
+userSchema.methods.correctPassword = async function (candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Generate JWT token
+userSchema.methods.generateAuthToken = function() {
+  return jwt.sign(
+    { 
+      id: this._id, 
+      email: this.email,
+      role: this.role 
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
+  );
+};
+
+// Generate refresh token
+userSchema.methods.generateRefreshToken = function() {
+  const refreshToken = jwt.sign(
+    { id: this._id },
+    process.env.REFRESH_TOKEN_SECRET || 'your-refresh-token-secret',
+    { expiresIn: '7d' }
+  );
+  return refreshToken;
 };
 
 userSchema.methods.changedPasswordAfter = function (JWTTimestamp) {

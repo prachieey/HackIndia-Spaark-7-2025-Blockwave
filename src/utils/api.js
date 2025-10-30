@@ -4,14 +4,14 @@
 // ============================================================================
 import { jwtDecode } from 'jwt-decode';
 
-const DEFAULT_BACKEND_PORT = '5003';
+const DEFAULT_BACKEND_PORT = '5002';
 const DEFAULT_API_VERSION = 'v1';
 
 // Get the base URL from environment variables or use default
 const getBackendUrl = () => {
   // In development, always use localhost with the backend port
   if (import.meta.env.DEV) {
-    return `http://localhost:5003`; // Using localhost to match CSP rules
+    return `http://localhost:5002`; // Using localhost to match CSP rules
   }
   
   // In production, use the Vite environment variable if set
@@ -36,7 +36,7 @@ const getBackendUrl = () => {
 // Get base URL without API version
 const getApiBaseUrl = () => {
   const baseUrl = getBackendUrl();
-  return baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`;
+  return baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api/v1`;
 };
 
 // Get versioned API URL
@@ -200,6 +200,33 @@ function onTokenRefreshed(token) {
   refreshSubscribers = [];
 }
 
+// Helper function to check if a route is public
+const isPublicRoute = (url) => {
+  const publicRoutes = [
+    '/api/v1/events',
+    '/api/v1/events/explore',
+    '/api/v1/events/blockchain',
+    '/api/v1/events/upcoming',
+    '/api/v1/events/featured',
+    '/api/v1/events/categories',
+    '/api/v1/auth',
+    '/api/v1/auth/refresh-token',
+    '/api/v1/auth/verify-email',
+    '/api/v1/auth/forgot-password',
+    '/api/v1/auth/reset-password',
+    '/api/v1/users/register',
+    '/api/v1/users/forgot-password',
+    '/api/v1/users/reset-password',
+    '/api/v1/users/verify-email',
+  ];
+
+  // Also check for public event details routes
+  const publicEventPattern = /\/api\/v1\/events\/[a-f0-9]{24}$/i;
+  
+  return publicRoutes.some(route => url.includes(route)) || 
+         publicEventPattern.test(url);
+};
+
 async function apiRequest(endpoint, options = {}) {
   // Define public endpoints that don't require authentication
   const publicEndpoints = [
@@ -210,17 +237,18 @@ async function apiRequest(endpoint, options = {}) {
     'auth/refresh',
     'auth/verify-email',
     'auth/reset-password',
-    'auth/forgot-password'
+    'auth/forgot-password',
+    'events'  // Add events to public endpoints since it's a public route
   ].map(ep => ep.replace(/^\/+|\/+$/g, ''));  // Normalize endpoints
   
   // Get the token from localStorage
   const token = localStorage.getItem('token');
   
   // Normalize endpoint for comparison (remove leading/trailing slashes)
-  const normalizedEndpoint = endpoint.replace(/^\/+|\/+$/g, '');
+  const normalizedEndpoint = endpoint.replace(/^\/+|\/+$/g, '').split('?')[0]; // Remove query params for comparison
   const isPublic = publicEndpoints.some(ep => 
     normalizedEndpoint === ep.replace(/^\/+|\/+$/g, '')
-  );
+  ) || isPublicRoute(endpoint);
   
   // Build the full URL using our helper
   const fullUrl = buildApiUrl(endpoint);
@@ -233,42 +261,25 @@ async function apiRequest(endpoint, options = {}) {
     'Cache-Control': 'no-cache',
     'Pragma': 'no-cache',
     'X-Requested-With': 'XMLHttpRequest',
-    // Add CORS headers
-    'Access-Control-Allow-Origin': 'http://localhost:3000',
-    'Access-Control-Allow-Credentials': 'true',
     ...(options.headers || {})
   });
-
-  // Add authorization token if available and not a public endpoint
-  if (!isPublic || token) {
-    // Get the token from localStorage if not provided
-    const authToken = token || localStorage.getItem('token');
-    
-    if (authToken) {
-      // Make sure to include the 'Bearer ' prefix
-      const bearerToken = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
-      headers.set('Authorization', bearerToken);
-      console.log('Added Authorization header to request');
-    } else if (!isPublic) {
-      console.warn('No authentication token found for protected endpoint:', endpoint);
-      
-      // For protected routes, redirect to login
-      if (typeof window !== 'undefined' && !endpoint.includes('auth/')) {
-        // Don't redirect if we're already on the login page
-        if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
-        }
-      }
-      
-      // Don't throw here to allow the server to handle the missing token
-      // The server will return a 401 if the endpoint requires authentication
-    }
-  }
   
-  // Generate a unique ID for this request
-  const requestId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-  const controller = new AbortController();
-  pendingRequests.set(requestId, controller);
+  // Set up fetch options
+  const fetchOptions = {
+    ...options,
+    headers,
+    mode: 'cors',
+    credentials: 'include', // Include cookies for authentication
+    redirect: 'follow'
+  };
+  
+  // Add authorization token if available and not a public endpoint
+  if (token && !isPublic) {
+    console.log('Adding Authorization header for URL:', fullUrl);
+    headers.set('Authorization', `Bearer ${token}`);
+  } else {
+    console.log('Skipping Authorization header for public URL:', fullUrl);
+  }
   
   // Handle request body
   let body = options.body;
@@ -282,7 +293,7 @@ async function apiRequest(endpoint, options = {}) {
   
   // Log request in development
   if (import.meta.env.DEV) {
-    console.group(`API Request [${requestId}]: ${options.method || 'GET'} ${fullUrl}`);
+    console.group(`API Request [${fullUrl}]: ${options.method || 'GET'} ${fullUrl}`);
     console.log('Headers:', Object.fromEntries(headers.entries()));
     if (body && !isFormData) console.log('Body:', body);
     if (body && isFormData) console.log('Body: [FormData]');
@@ -297,7 +308,7 @@ async function apiRequest(endpoint, options = {}) {
       body: body,
       credentials: 'include',
       mode: 'cors',
-      signal: controller.signal,
+      signal: new AbortController().signal,
       ...options, // Spread any additional options
     };
     
@@ -308,7 +319,7 @@ async function apiRequest(endpoint, options = {}) {
     try {
       response = await fetch(fullUrl, {
         ...fetchOptions,
-        signal: controller.signal
+        signal: new AbortController().signal
       });
     } catch (error) {
       // Network error or request was aborted
@@ -329,7 +340,7 @@ async function apiRequest(endpoint, options = {}) {
     }
 
     if (import.meta.env.DEV) {
-      console.group(`API Response [${requestId}]: ${response.status} ${options.method || 'GET'} ${fullUrl}`);
+      console.group(`API Response [${fullUrl}]: ${response.status} ${options.method || 'GET'} ${fullUrl}`);
       console.log('Status:', response.status, response.statusText);
       console.log('Headers:', Object.fromEntries(response.headers.entries()));
       console.log('Response:', responseData);
@@ -364,79 +375,53 @@ async function apiRequest(endpoint, options = {}) {
             headers.set('Authorization', `Bearer ${newToken}`);
             
             // Retry the original request
-            try {
-              const fetchOptions = {
-                method: options.method || 'GET',
-                headers,
-                body,
-                signal: controller.signal,
-                // Always include credentials for CORS requests
-                credentials: 'include',
-                // Add CORS mode
-                mode: 'cors',
-                // Add cache control
-                cache: 'no-store',
-                // Add referrer policy
-                referrerPolicy: 'no-referrer-when-downgrade',
-                // Keep the existing credentials option if provided
-                ...(options.credentials ? { credentials: options.credentials } : {})
-              };
-              
-              console.log('Fetch options:', {
-                ...fetchOptions,
-                headers: Object.fromEntries(headers.entries())
-              });
-              
-              const response = await fetch(fullUrl, fetchOptions);
-              
-              // Log response details for debugging
-              console.log('Response status:', response.status, response.statusText);
-              console.log('Response headers:', Object.fromEntries(response.headers.entries()));        
-              // Process the retry response
-              const retryData = await response.json();
-              isRefreshing = false;
-              onTokenRefreshed(newToken);
-              return retryData;
-            } catch (error) {
-              console.error('Error retrying request:', error);
-              throw error;
+            const retryOptions = {
+              method: options.method || 'GET',
+              headers: new Headers({
+                ...Object.fromEntries(headers.entries()),
+                'Authorization': `Bearer ${newToken}`
+              }),
+              body,
+              signal: controller.signal,
+              credentials: 'include',
+              mode: 'cors',
+              cache: 'no-store',
+              referrerPolicy: 'no-referrer-when-downgrade'
+            };
+            
+            const retryResponse = await fetch(fullUrl, retryOptions);
+            
+            if (!retryResponse.ok) {
+              throw new Error(`HTTP error! status: ${retryResponse.status}`);
             }
-          } else {
-            // If refresh failed, clear auth and redirect to login
-            cleanAuthData();
-            if (typeof window !== 'undefined') {
-              window.location.href = '/login?session=expired';
+            
+            const contentType = retryResponse.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              return await retryResponse.json();
             }
-            throw new Error('Your session has expired. Please log in again.');
+            return await retryResponse.text();
           }
         } catch (refreshError) {
           console.error('Error refreshing token:', refreshError);
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            window.location.href = '/login?session=expired';
-          }
-          throw new Error('Your session has expired. Please log in again.');
+          // If we can't refresh, clear auth data and redirect to login
+          cleanAuthData();
+          window.location.href = '/login';
+          throw new Error('Session expired. Please log in again.');
         }
       }
-
-      const errorMessage = responseData?.message || 
-                         responseData?.error?.message || 
-                         response.statusText || 
-                         'An error occurred';
       
-      const error = new Error(errorMessage);
-      error.status = response.status;
-      error.response = responseData;
-      
-      if (response.status === 403) {
-        error.message = 'You do not have permission to perform this action';
-      } else if (response.status === 404) {
-        error.message = 'The requested resource was not found';
-      } else if (response.status >= 500) {
-        error.message = 'A server error occurred. Please try again later.';
+      // For other errors, try to get error details from response
+      let errorData = {};
+      try {
+        const errorText = await response.text();
+        errorData = errorText ? JSON.parse(errorText) : {};
+      } catch (e) {
+        console.error('Error parsing error response:', e);
       }
       
+      const error = new Error(errorData.message || response.statusText || 'An error occurred');
+      error.status = response.status;
+      error.data = errorData;
       throw error;
     }
 

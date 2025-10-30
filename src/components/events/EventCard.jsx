@@ -9,6 +9,36 @@ import { format, parseISO, isPast, isToday, isTomorrow, isThisWeek } from 'date-
 import { ethers } from 'ethers';
 const formatEther = (value) => ethers.utils.formatEther(value);
 
+// Format date to a readable format
+const formatEventDate = (dateString) => {
+  if (!dateString) return 'Date not set';
+  
+  try {
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Invalid date';
+    
+    // Check if the time is set to midnight (no specific time provided)
+    const hasTime = !(date.getHours() === 0 && date.getMinutes() === 0);
+    
+    if (isToday(date)) {
+      return hasTime ? `Today • ${format(date, 'h:mm a')}` : 'Today';
+    } else if (isTomorrow(date)) {
+      return hasTime ? `Tomorrow • ${format(date, 'h:mm a')}` : 'Tomorrow';
+    } else if (isThisWeek(date)) {
+      return hasTime 
+        ? `${format(date, 'EEEE • h:mm a')}`
+        : format(date, 'EEEE');
+    } else {
+      return hasTime
+        ? format(date, 'MMM d, yyyy • h:mm a')
+        : format(date, 'MMM d, yyyy');
+    }
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'Invalid date';
+  }
+};
+
 // Default event image
 const DEFAULT_EVENT_IMAGE = 'https://images.unsplash.com/photo-1531058020387-3be344556be6?ixlib=rb-4.0.3&auto=format&fit=crop&w=1470&q=80';
 
@@ -252,71 +282,68 @@ const EventCard = ({
       return isNaN(num) ? 0 : num;
     };
     
+    // Format the price with INR symbol and add 'onwards' for minimum price
+    const formatCurrency = (amount, showOnwards = true) => {
+      const formatted = `₹${amount.toLocaleString('en-IN', { 
+        minimumFractionDigits: 0, 
+        maximumFractionDigits: 0 
+      })}`;
+      
+      return showOnwards ? `${formatted} onwards` : formatted;
+    };
+    
     // If marked as free, return free
     if (eventData.isFree) return { text: 'Free', value: 0 };
     
     try {
-      // If there are multiple ticket prices, show a range
-      if (eventData.hasMultiplePrices) {
-        const min = toNumber(eventData.minPrice);
-        const max = toNumber(eventData.maxPrice);
-        
-        // If min and max are the same, just show one price
-        if (min === max) {
-          return {
-            text: `₹${min.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-            value: min
-          };
-        }
-        
-        // Otherwise show the range
-        return {
-          text: `₹${min.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} - ₹${max.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-          value: min // Use min value for sorting
-        };
-      }
-      
       // If price is in wei (from blockchain)
       if (typeof eventData.price === 'string' && eventData.price.startsWith('0x')) {
         const priceInEth = parseFloat(formatEther(eventData.price));
-        // Convert ETH to INR (assuming 1 ETH = 200,000 INR for this example)
-        const priceInInr = priceInEth * 200000;
+        const priceInInr = priceInEth * 200000; // Convert ETH to INR
         return { 
-          text: `₹${priceInInr.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          text: formatCurrency(priceInInr),
           value: priceInInr
         };
       }
       
-      // For regular prices (already in INR)
-      const price = toNumber(eventData.price);
-      if (price <= 0) return { text: 'Free', value: 0 };
+      // If there are multiple ticket prices, show a range
+      if (eventData.hasMultiplePrices || (eventData.minPrice && eventData.maxPrice)) {
+        const min = toNumber(eventData.minPrice);
+        const max = toNumber(eventData.maxPrice);
+        
+        // If we have a valid range
+        if (min > 0 && max > 0 && min !== max) {
+          return {
+            text: `${formatCurrency(min, false)} - ${formatCurrency(max)}`,
+            value: min
+          };
+        }
+        // If only min price is available or min equals max
+        else if (min > 0) {
+          return {
+            text: formatCurrency(min),
+            value: min
+          };
+        }
+      }
       
-      return { 
-        text: `₹${price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        value: price
-      };
+      // Single price case
+      const price = toNumber(eventData.price);
+      if (price > 0) {
+        return {
+          text: formatCurrency(price),
+          value: price
+        };
+      }
+      
+      // Default case - free
+      return { text: 'Free', value: 0 };
+      
     } catch (error) {
       console.error('Error formatting price:', error);
       return { text: 'Free', value: 0 };
     }
-  }, [eventData.price, eventData.minPrice, eventData.maxPrice, eventData.hasMultiplePrices, formatEther]);
-
-  // Calculate event status
-  const eventStatus = useMemo(() => {
-    if (!eventData.date) return 'upcoming';
-    
-    const eventDate = typeof eventData.date === 'string' ? parseISO(eventData.date) : new Date(eventData.date);
-    
-    if (isPast(eventDate)) return 'past';
-    if (isToday(eventDate)) return 'today';
-    if (isTomorrow(eventDate)) return 'tomorrow';
-    return 'upcoming';
-  }, [eventData.date]);
-
-  // Handle image error
-  const handleImageError = () => {
-    setImageError(true);
-  };
+  }, [eventData.isFree, eventData.price, eventData.minPrice, eventData.maxPrice, eventData.hasMultiplePrices]);
 
   // Toggle favorite status
   const toggleFavorite = (e) => {
@@ -475,10 +502,16 @@ const EventCard = ({
       {/* Image with hover overlay */}
       <div className="relative h-48 overflow-hidden">
         <img
-          src={imageError ? DEFAULT_EVENT_IMAGE : eventData.image}
-          alt={eventData.title}
-          onError={handleImageError}
+          src={eventData.image || eventData.coverImage || eventData.thumbnail || DEFAULT_EVENT_IMAGE}
+          alt={eventData.title || 'Event image'}
+          onError={(e) => {
+            if (e.target.src !== DEFAULT_EVENT_IMAGE) {
+              e.target.onerror = null; // Prevent infinite loop
+              e.target.src = DEFAULT_EVENT_IMAGE;
+            }
+          }}
           className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+          loading="lazy"
         />
         
         {/* Image overlay gradient */}

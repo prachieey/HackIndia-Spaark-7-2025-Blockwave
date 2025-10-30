@@ -1,10 +1,10 @@
 // API Configuration
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
-  `http://localhost:${import.meta.env.VITE_BACKEND_PORT || 3001}/api/${import.meta.env.VITE_API_VERSION || 'v1'}`;
+  `http://localhost:${import.meta.env.VITE_BACKEND_PORT || 5002}/api/${import.meta.env.VITE_API_VERSION || 'v1'}`;
 
 // WebSocket Configuration
 export const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 
-  `ws://localhost:${import.meta.env.VITE_BACKEND_PORT || 3001}`;
+  `ws://localhost:${import.meta.env.VITE_BACKEND_PORT || 5002}`;
 
 // Other configuration constants
 export const APP_NAME = 'Scantyx';

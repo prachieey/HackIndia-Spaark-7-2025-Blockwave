@@ -3,11 +3,6 @@ import { useNavigate, Link, useLocation, useSearchParams } from 'react-router-do
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { 
-  signInWithGoogle, 
-  signInWithFacebook, 
-  signInWithApple 
-} from '../config/firebase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +24,7 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [isLogin, setIsLogin] = useState(true);
   const [name, setName] = useState('');
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const [socialLoading, setSocialLoading] = useState({
     google: false,
     facebook: false,
@@ -50,32 +46,43 @@ const LoginPage = () => {
     const errorType = searchParams.get('error');
     const modeParam = searchParams.get('mode');
     
-    if (modeParam === 'signup') {
-      setIsLogin(false);
-    } else if (modeParam === 'login') {
-      setIsLogin(true);
-    }
-    
-    if (errorType === 'session_expired') {
-      setError('Your session has expired. Please log in again.');
+    // Only process URL parameters if we're on the login page
+    if (window.location.pathname === '/login') {
+      if (modeParam === 'signup') {
+        setIsLogin(false);
+      } else if (modeParam === 'login') {
+        setIsLogin(true);
+      }
+      
+      if (errorType === 'session_expired') {
+        setError('Your session has expired. Please log in again.');
+      }
     }
   }, [location]);
 
+
   // Handle redirection after authentication
   useEffect(() => {
+    // Clear any potential error states when component mounts or route changes
+    setError('');
+    
     if (initialRender.current) {
       initialRender.current = false;
       return;
     }
 
-    if (isAuthenticated && window.location.pathname === '/login') {
-      console.log('User authenticated, redirecting to home...');
-      // Clear any URL parameters before redirecting
-      cleanUrl();
-      // Use window.location.href to force a full page reload
-      window.location.href = '/';
+    if (isAuthenticated) {
+      const from = location.state?.from?.pathname || '/';
+      
+      // Only redirect if we're still on the login page
+      if (window.location.pathname === '/login') {
+        // Clear any URL parameters before redirecting
+        cleanUrl();
+        // Use replace to prevent going back to login page with browser back button
+        navigate(from, { replace: true });
+      }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, location.state, navigate]);
 
 
   const toggleAuthMode = () => {
@@ -83,11 +90,23 @@ const LoginPage = () => {
     setPassword('');
     setName('');
     setError('');
+    setHasSubmitted(false);
     setIsLogin(!isLogin);
   };
 
   const validateForm = () => {
+    // Only validate if form has been submitted
+    if (!hasSubmitted) return true;
+    
+    // Clear previous errors
+    setError('');
+    
     // Basic validation
+    if (!isLogin && !name.trim()) {
+      setError('Please enter your name');
+      return false;
+    }
+
     if (!email.trim()) {
       setError('Please enter your email address');
       return false;
@@ -106,16 +125,46 @@ const LoginPage = () => {
     }
 
     // Password strength validation for signup
-    if (!isLogin && password.length < 8) {
-      setError('Password must be at least 8 characters long');
-      return false;
+    if (!isLogin) {
+      if (password.length < 8) {
+        setError('Password must be at least 8 characters long');
+        return false;
+      }
+      if (!/[A-Z]/.test(password)) {
+        setError('Password must contain at least one uppercase letter');
+        return false;
+      }
+      if (!/\d/.test(password)) {
+        setError('Password must contain at least one number');
+        return false;
+      }
     }
     
     return true;
   };
 
+  // Toast management
+  const showErrorToast = (message) => {
+    // Dismiss any existing error toasts to prevent duplicates
+    toast.dismiss('error-toast');
+    
+    // Show new error toast with a unique ID
+    toast.error(message, {
+      toastId: 'error-toast',
+      position: 'top-right',
+      autoClose: 5000,
+      hideProgressBar: false,
+      closeOnClick: true,
+      pauseOnHover: true,
+      draggable: true,
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Mark that the form has been submitted
+    setHasSubmitted(true);
     
     if (!validateForm()) {
       return;
@@ -126,6 +175,9 @@ const LoginPage = () => {
     
     setLoading(true);
     setError(''); // Clear previous errors
+    
+    // Dismiss any existing toasts
+    toast.dismiss();
     
     try {
       console.log(`Attempting ${isLogin ? 'login' : 'signup'} with email:`, email);
@@ -157,6 +209,10 @@ const LoginPage = () => {
         if (isLogin) {
           result = await login(email, password);
         } else {
+          // For signup, ensure we have a name
+          if (!name.trim()) {
+            throw new Error('Please enter your name');
+          }
           result = await signup(name, email, password);
         }
         
@@ -217,7 +273,7 @@ const LoginPage = () => {
         }
         
         setError(errorMessage);
-        toast.error(errorMessage);
+        showErrorToast(errorMessage);
         throw authError; // Re-throw to be caught by the outer catch
       }
       
@@ -226,6 +282,30 @@ const LoginPage = () => {
       
       // Handle specific error cases with more user-friendly messages
       let errorMsg = 'An unexpected error occurred. Please try again.';
+      
+      // Handle Firebase specific errors
+      if (error.code) {
+        switch (error.code) {
+          case 'auth/user-not-found':
+          case 'auth/wrong-password':
+            errorMsg = 'Invalid email or password.';
+            break;
+          case 'auth/email-already-in-use':
+            errorMsg = 'Email already in use.';
+            break;
+          case 'auth/weak-password':
+            errorMsg = 'Password should be at least 6 characters.';
+            break;
+          case 'auth/network-request-failed':
+            errorMsg = 'Network error. Please check your internet connection.';
+            break;
+          case 'auth/too-many-requests':
+            errorMsg = 'Too many attempts. Please try again later.';
+            break;
+          default:
+            errorMsg = error.message || errorMsg;
+        }
+      }
       
       if (error?.response) {
         // Server responded with an error status code (4xx, 5xx)
@@ -529,19 +609,10 @@ const LoginPage = () => {
                   <button
                     type="button"
                     onClick={async () => {
-                      setSocialLoading(prev => ({ ...prev, apple: true }));
-                      setError('');
-                      try {
-                        const { user, error } = await signInWithApple();
-                        if (error) throw new Error(error);
-                        // Redirect or handle successful login
-                        navigate(from, { replace: true });
-                      } catch (err) {
-                        console.error('Apple sign in error:', err);
-                        setError('Failed to sign in with Apple. Please try again.');
-                      } finally {
-                        setSocialLoading(prev => ({ ...prev, apple: false }));
-                      }
+                      const handleSocialLogin = async (provider) => {
+                        toast.info(`${provider} login will be available soon.`);
+                      };
+                      handleSocialLogin('Apple');
                     }}
                     disabled={socialLoading.apple || loading}
                     className={`flex items-center justify-center w-full px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors ${
@@ -564,19 +635,44 @@ const LoginPage = () => {
                   <button
                     type="button"
                     onClick={async () => {
-                      setSocialLoading(prev => ({ ...prev, facebook: true }));
-                      setError('');
-                      try {
-                        const { user, error } = await signInWithFacebook();
-                        if (error) throw new Error(error);
-                        // Redirect or handle successful login
-                        navigate(from, { replace: true });
-                      } catch (err) {
-                        console.error('Facebook sign in error:', err);
-                        setError('Failed to sign in with Facebook. Please try again.');
-                      } finally {
-                        setSocialLoading(prev => ({ ...prev, facebook: false }));
-                      }
+                      const handleSubmit = async (e) => {
+                        e.preventDefault();
+                        
+                        if (!validateForm()) {
+                          return;
+                        }
+                        
+                        try {
+                          setLoading(true);
+                          setError('');
+                          
+                          if (isLogin) {
+                            // Login flow
+                            const result = await login(email, password);
+                            if (result.success) {
+                              const from = location.state?.from?.pathname || '/';
+                              navigate(from, { replace: true });
+                            } else {
+                              setError(result.error || 'Login failed. Please try again.');
+                            }
+                          } else {
+                            // Signup flow
+                            const result = await signup(name, email, password);
+                            if (result.success) {
+                              // After successful signup, redirect to dashboard or home
+                              navigate('/', { replace: true });
+                            } else {
+                              setError(result.error || 'Signup failed. Please try again.');
+                            }
+                          }
+                        } catch (error) {
+                          console.error('Authentication error:', error);
+                          setError(error.message || 'An error occurred. Please try again.');
+                        } finally {
+                          setLoading(false);
+                        }
+                      };
+                      handleSubmit();
                     }}
                     disabled={socialLoading.facebook || loading}
                     className={`flex items-center justify-center w-full px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors ${

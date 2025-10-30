@@ -26,7 +26,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious, PaginationEllipsis } from '../components/ui/pagination';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
-import { eventAPI } from '../services/eventService';
+import eventAPI from '../services/eventService';
 import { createGenericEvent } from '../utils/eventUtils';
 
 const { getEvent, getEvents } = eventAPI;

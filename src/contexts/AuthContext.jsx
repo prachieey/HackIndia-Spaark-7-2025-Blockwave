@@ -1,642 +1,363 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
+/* src/contexts/AuthContext.jsx */
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { jwtDecode } from 'jwt-decode';
-import { api } from '../utils/api';
-import http from '../services/httpService';
+import authService from '../services/authService';
 
-// Helper function to check if a JWT token is expired
+/* -------------------------------------------------------------------------- */
+/*                               Helper functions                             */
+/* -------------------------------------------------------------------------- */
 const isTokenExpired = (token) => {
   if (!token) return true;
   try {
-    const decoded = jwtDecode(token);
+    const decoded = authService.decodeToken(token);
     return decoded.exp < Date.now() / 1000;
-  } catch (error) {
-    console.error('Error decoding token:', error);
-    return true; // If we can't decode the token, consider it expired
+  } catch (e) {
+    console.error('Error decoding token:', e);
+    return true;
   }
 };
 
-// Helper to safely parse JSON from localStorage
-const safeJsonParse = (key, defaultValue = null) => {
+const safeJsonParse = (key, defaultValue) => {
   try {
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : defaultValue;
-  } catch (error) {
-    console.error(`Error parsing ${key} from localStorage:`, error);
+  } catch (e) {
+    console.error(`Error parsing ${key} from localStorage:`, e);
     return defaultValue;
   }
 };
 
-// Create auth context
+/* -------------------------------------------------------------------------- */
+/*                                 Context                                    */
+/* -------------------------------------------------------------------------- */
 export const AuthContext = createContext(null);
 
-// Export the context for direct usage when needed
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+  return ctx;
 };
 
 export const AuthProvider = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  
-  // State for user and loading
-  const [user, setUser] = useState(() => safeJsonParse('user'));
+
+  const isAuthPage =
+    location.pathname.includes('/login') ||
+    location.pathname.includes('/signup') ||
+    location.pathname.includes('/forgot-password');
+
+  /* ------------------------------ State ----------------------------------- */
+  const [user, setUser] = useState(() => safeJsonParse('scantyx_user', null));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
-  
-  // Track if we're currently refreshing the token to prevent multiple refresh attempts
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const token = localStorage.getItem('scantyx_token');
+    if (!token || isTokenExpired(token)) return false;
+    authService.setAuthToken?.(token) ||
+      (authService.defaults.headers.common['Authorization'] = `Bearer ${token}`);
+    return true;
+  });
+
   const isRefreshing = useRef(false);
-  
-  // Store tokens in memory to reduce localStorage access
-  const tokenRef = useRef(localStorage.getItem('token'));
-  const refreshTokenRef = useRef(localStorage.getItem('refreshToken'));
-  
-  // Update token references when they change
+  const tokenRef = useRef(localStorage.getItem('scantyx_token'));
+  const refreshTokenRef = useRef(localStorage.getItem('scantyx_refresh_token'));
+
+  /* ---------------------------- Token refs -------------------------------- */
   const updateTokenRefs = useCallback((token, refreshToken) => {
     tokenRef.current = token;
     refreshTokenRef.current = refreshToken;
   }, []);
-  
-  // Save auth data to localStorage and update refs
-  const persistAuthData = useCallback(({ user: userData, token, refreshToken }) => {
-    try {
-      if (userData) {
-        const userToStore = { ...userData };
-        // Don't store sensitive data
-        delete userToStore.password;
-        delete userToStore.tokens;
-        
-        localStorage.setItem('user', JSON.stringify(userToStore));
-        setUser(userToStore);
-      }
-      
-      if (token) {
-        localStorage.setItem('token', token);
-        tokenRef.current = token;
-      }
-      
-      if (refreshToken) {
-        localStorage.setItem('refreshToken', refreshToken);
-        refreshTokenRef.current = refreshToken;
-      }
-      
-      // Update axios default headers
-      if (token) {
-        http.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      }
-      
-      return true;
-    } catch (error) {
-      console.error('Error persisting auth data:', error);
-      return false;
-    }
-  }, []);
-  
-  // Check if user is authenticated
-  const isAuthenticated = useCallback(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return false;
-    
-    try {
-      const decoded = jwtDecode(token);
-      return decoded.exp * 1000 > Date.now();
-    } catch (error) {
-      console.error('Error decoding token:', error);
-      return false;
-    }
-  }, []);
 
-  // Logout function with cleanup
-  const logout = useCallback((options = {}) => {
-    const { redirectTo = '/login', showMessage = true } = options;
-    
-    // Clear all auth data
-    localStorage.removeItem('user');
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    
-    // Clear token references
-    tokenRef.current = null;
-    refreshTokenRef.current = null;
-    
-    // Clear axios headers
-    delete http.defaults.headers.common['Authorization'];
-    
-    // Reset state
-    setUser(null);
-    setError(null);
-    
-    // Show logout message if needed
-    if (showMessage) {
-      toast.info('You have been logged out');
-    }
-    
-    // Redirect if needed
-    if (redirectTo && window.location.pathname !== redirectTo) {
-      navigate(redirectTo);
-    }
-    
-    // Clear any pending requests
-    isRefreshing.current = false;
-    
-  }, [navigate]);
+  /* ------------------------------ Logout --------------------------------- */
+  const logout = useCallback(
+    async (options = {}) => {
+      const { redirectTo = '/login', showMessage = true } = options;
 
-  // Enhanced token refresh with retry logic
-  const refreshToken = useCallback(async (maxRetries = 3) => {
-    // If we're already refreshing, return the current promise
-    if (isRefreshing.current) {
-      return new Promise((resolve, reject) => {
-        const checkRefresh = () => {
-          if (!isRefreshing.current) {
-            if (tokenRef.current) {
-              resolve(tokenRef.current);
-            } else {
-              reject(new Error('Token refresh failed'));
-            }
-          } else {
-            setTimeout(checkRefresh, 100);
-          }
-        };
-        checkRefresh();
-      });
-    }
-    
-    const currentRefreshToken = refreshTokenRef.current || localStorage.getItem('refreshToken');
-    
-    if (!currentRefreshToken) {
-      logout({ showMessage: false });
-      return null;
-    }
-    
-    isRefreshing.current = true;
-    
-    try {
-      let retryCount = 0;
-      let lastError;
-      
-      while (retryCount < maxRetries) {
-        try {
-          const response = await http.post('/auth/refresh-token', { 
-            refreshToken: currentRefreshToken 
-          }, { 
-            skipAuthRefresh: true 
-          });
-          
-          const { token: newToken, refreshToken: newRefreshToken, user: userData } = response.data;
-          
-          if (!newToken || !newRefreshToken) {
-            throw new Error('Invalid token response');
-          }
-          
-          // Persist the new tokens
-          persistAuthData({ 
-            token: newToken, 
-            refreshToken: newRefreshToken,
-            user: userData
-          });
-          
-          return newToken;
-          
-        } catch (error) {
-          lastError = error;
-          retryCount++;
-          
-          // If it's a network error or server error, retry after delay
-          if (error.response?.status >= 500 || !error.response) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryCount)));
-            continue;
-          }
-          
-          // For other errors, break the retry loop
-          break;
-        }
+      if (isRefreshing.current) {
+        console.log('[Auth] Logout already in progress');
+        return { success: false, error: 'Logout already in progress' };
       }
-      
-      // If we get here, all retries failed
-      throw lastError || new Error('Failed to refresh token');
-      
-    } catch (error) {
-      console.error('Error refreshing token:', error);
-      
-      // If refresh token is invalid, logout the user
-      if (error.response?.status === 401) {
-        logout({ 
-          redirectTo: '/login',
-          showMessage: true
-        });
-      }
-      
-      return null;
-      
-    } finally {
-      isRefreshing.current = false;
-    }
-  }, [logout, persistAuthData]);
 
-  // Check authentication status on mount and route change
-  useEffect(() => {
-    const checkAuth = async () => {
-      if (isInitialized) return;
-      
+      isRefreshing.current = true;
+      setIsAuthenticated(false);
+
       try {
-        setLoading(true);
-        
-        // Check for token in localStorage
-        const token = localStorage.getItem('token');
-        
-        if (!token) {
-          setLoading(false);
-          setIsInitialized(true);
+        localStorage.removeItem('scantyx_user');
+        localStorage.removeItem('scantyx_token');
+        localStorage.removeItem('scantyx_refresh_token');
+
+        updateTokenRefs(null, null);
+        delete authService.defaults.headers.common['Authorization'];
+
+        setUser(null);
+        setError(null);
+        if (showMessage) toast.dismiss();
+
+        if (redirectTo && window.location.pathname !== redirectTo) {
+          navigate(redirectTo, { replace: true });
+        }
+
+        return { success: true };
+      } catch (err) {
+        console.error('[Auth] Logout error:', err);
+        return { success: false, error: err.message };
+      } finally {
+        isRefreshing.current = false;
+      }
+    },
+    [navigate, updateTokenRefs],
+  );
+
+  /* --------------------------- Token refresh ----------------------------- */
+  const refreshAuthToken = useCallback(async () => {
+    const refreshToken = refreshTokenRef.current || localStorage.getItem('scantyx_refresh_token');
+    if (!refreshToken) return null;
+
+    try {
+      const { data } = await authService.post('/auth/refresh-token', { refreshToken });
+      const { token: newToken } = data;
+      if (!newToken) return null;
+
+      tokenRef.current = newToken;
+      localStorage.setItem('scantyx_token', newToken);
+      authService.setAuthToken?.(newToken) ||
+        (authService.defaults.headers.common['Authorization'] = `Bearer ${newToken}`);
+
+      return newToken;
+    } catch (e) {
+      console.error('Token refresh failed:', e);
+      return null;
+    }
+  }, []);
+
+  /* --------------------------- Auth init -------------------------------- */
+  const checkAuth = useCallback(async () => {
+    const publicRoutes = ['/explore', '/about', '/login', '/signup', '/forgot-password', '/reset-password'];
+    const isPublic = publicRoutes.some((p) => location.pathname.startsWith(p));
+
+    try {
+      setLoading(true);
+      const token = tokenRef.current || localStorage.getItem('scantyx_token');
+
+      // No token → not authenticated (except on public routes)
+      if (!token && !isPublic) {
+        setIsAuthenticated(false);
+        return;
+      }
+
+      // Public route → skip verification
+      if (isPublic) return;
+
+      // Expired token → try refresh
+      if (token && isTokenExpired(token)) {
+        const fresh = await refreshAuthToken();
+        if (!fresh) {
+          setIsAuthenticated(false);
           return;
         }
-        
-        // Check if token is expired
-        if (isTokenExpired(token)) {
-          console.log('Token expired, attempting to refresh...');
-          const newToken = await refreshToken();
-          if (!newToken) {
-            console.log('Failed to refresh token, logging out...');
-            logout();
-            return;
-          }
-          // Continue with the new token
-        }
-        
-        // Verify the token with the server
-        try {
-          const response = await api.get('/auth/verify', {
-            withCredentials: true
-          });
-          
-          if (response && response.valid) {
-            const userData = response.user;
-            setUser(userData);
-            localStorage.setItem('user', JSON.stringify(userData));
-          } else {
-            console.log('Token verification failed, logging out...');
-            logout();
-          }
-        } catch (error) {
-          console.error('Error verifying token:', error);
-          // If verification fails, try to refresh the token one more time
-          if (error.status === 401) {
-            const newToken = await refreshToken();
-            if (!newToken) {
-              logout();
-              return;
-            }
-            // If we got a new token, verify it
-            try {
-              const retryResponse = await api.get('/auth/verify', {
-                withCredentials: true
-              });
-              
-              if (retryResponse && retryResponse.valid) {
-                const userData = retryResponse.user;
-                setUser(userData);
-                localStorage.setItem('user', JSON.stringify(userData));
-                return;
-              }
-            } catch (retryError) {
-              console.error('Error during token verification retry:', retryError);
-            }
-          }
-          logout();
-        }
-      } catch (error) {
-        console.error('Error in auth check:', error);
-        logout();
-      } finally {
-        setLoading(false);
-        setIsInitialized(true);
       }
-    };
-    
-    checkAuth();
-  }, [location, logout, isInitialized, refreshToken]);
 
-  // Login function
+      // Verify with server
+      const { data } = await authService.get('/auth/me');
+      setUser(data);
+      setIsAuthenticated(true);
+    } catch (e) {
+      console.error('Auth verification failed:', e);
+      setIsAuthenticated(false);
+    } finally {
+      setLoading(false);
+      setIsInitialized(true);
+    }
+  }, [location.pathname, refreshAuthToken]);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
+  /* --------------------------- Persist auth data -------------------------- */
+  const persistAuthData = useCallback(
+    ({ user: userData, token, refreshToken }) => {
+      try {
+        if (token) {
+          localStorage.setItem('scantyx_token', token);
+          tokenRef.current = token;
+          authService.setAuthToken?.(token) ||
+            (authService.defaults.headers.common['Authorization'] = `Bearer ${token}`);
+        }
+        if (refreshToken) {
+          localStorage.setItem('scantyx_refresh_token', refreshToken);
+          refreshTokenRef.current = refreshToken;
+        }
+        if (userData) {
+          const safeUser = typeof userData === 'string' ? JSON.parse(userData) : userData;
+          localStorage.setItem('scantyx_user', JSON.stringify(safeUser));
+          setUser(safeUser);
+        }
+        if (token) setIsAuthenticated(true);
+        return true;
+      } catch (e) {
+        console.error('Persist error:', e);
+        setError('Failed to save auth data');
+        return false;
+      }
+    },
+    [],
+  );
+
+  /* -------------------------- Role check -------------------------------- */
+  const isAdmin = useCallback(() => user?.role === 'admin', [user]);
+
+  /* --------------------------- Rate limiting ----------------------------- */
+  const loginAttempts = useRef(new Map());
+  const MAX_LOGIN_ATTEMPTS = 5;
+  const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
+  const cleanupAttempts = useCallback(() => {
+    const now = Date.now();
+    for (const [k, { timestamp }] of loginAttempts.current.entries())
+      if (now - timestamp > LOGIN_WINDOW_MS) loginAttempts.current.delete(k);
+  }, []);
+
+  const isRateLimited = useCallback(
+    (id) => {
+      cleanupAttempts();
+      const rec = loginAttempts.current.get(id);
+      return rec ? rec.count >= MAX_LOGIN_ATTEMPTS : false;
+    },
+    [cleanupAttempts],
+  );
+
+  const recordAttempt = useCallback(
+    (id, success) => {
+      cleanupAttempts();
+      const now = Date.now();
+      const cur = loginAttempts.current.get(id) ?? { count: 0, timestamp: now };
+      if (success) loginAttempts.current.delete(id);
+      else loginAttempts.current.set(id, { count: cur.count + 1, timestamp: now });
+    },
+    [cleanupAttempts],
+  );
+
+  /* --------------------------- Toast helper ------------------------------ */
+  const showToastError = useCallback((msg) => {
+    toast.dismiss();
+    toast.error(msg);
+  }, []);
+
+  /* ------------------------------- Login --------------------------------- */
   const login = useCallback(
-    async (emailOrCredentials, password, options = {}) => {
-      // Handle different parameter patterns
-      let loginEmail, loginPassword, rememberMe, isFirebaseUser = false;
-      
-      // Handle null/undefined input
-      if (emailOrCredentials === null || emailOrCredentials === undefined) {
-        console.log('No credentials provided, treating as logout');
-        setUser(null);
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        return { success: true, user: null };
+    async (email, password) => {
+      if (!email) {
+        const msg = 'Email is required';
+        setError(msg);
+        if (isAuthPage) toast.error(msg);
+        return { success: false, error: msg };
       }
-      
-      if (typeof emailOrCredentials === 'object') {
-        // Handle case where first argument is an object
-        const credentials = emailOrCredentials;
-        
-        // Check if this is a Firebase user object
-        if (credentials.uid && credentials.providerData) {
-          isFirebaseUser = true;
-          loginEmail = credentials.email || '';
-          loginPassword = ''; // No password for Firebase auth
-          rememberMe = true; // Firebase handles persistence
-        } else {
-          // Regular credentials object
-          loginEmail = credentials.email || '';
-          loginPassword = credentials.password || '';
-          rememberMe = credentials.rememberMe || false;
-        }
-      } else {
-        // Handle case where email and password are separate parameters
-        loginEmail = emailOrCredentials || '';
-        loginPassword = password || '';
-        rememberMe = options.rememberMe || false;
+      const identifier = email.toLowerCase();
+      if (isRateLimited(identifier)) {
+        const next = new Date(loginAttempts.current.get(identifier).timestamp + LOGIN_WINDOW_MS).toLocaleTimeString();
+        const msg = `Too many attempts. Try again after ${next}`;
+        setError(msg);
+        if (isAuthPage) toast.error(msg);
+        return { success: false, error: msg };
       }
-      
-      // Validate inputs
-      if (!isFirebaseUser) {
-        if (!loginEmail.trim()) {
-          throw new Error('Email is required');
-        }
-        if (!loginPassword) {
-          throw new Error('Password is required');
-        }
-      } else if (!loginEmail.trim()) {
-        // For Firebase users, we still need at least an email
-        console.error('Firebase user is missing email');
-        throw new Error('Authentication failed: Invalid user data');
-      }
-      
+
       setLoading(true);
       setError(null);
-      
-      console.log('Starting login process...');
-      console.log('Email:', loginEmail);
-      console.log('Remember me:', rememberMe);
 
       try {
-        // Handle Firebase users differently (no API call needed)
-        if (isFirebaseUser) {
-          console.log('Handling Firebase user login...');
-          
-          // Create a user object that matches your application's expected format
-          const firebaseUser = emailOrCredentials;
-          const userData = {
-            _id: firebaseUser.uid,
-            email: firebaseUser.email,
-            name: firebaseUser.displayName || firebaseUser.email.split('@')[0],
-            role: 'user', // Default role, adjust as needed
-            ...firebaseUser.providerData[0],
-            emailVerified: firebaseUser.emailVerified,
-            photoURL: firebaseUser.photoURL,
-            providerId: firebaseUser.providerId,
-            uid: firebaseUser.uid
-          };
-          
-          console.log('Firebase user data:', userData);
-          
-          // Update user state and localStorage
-          setUser(userData);
-          localStorage.setItem('user', JSON.stringify(userData));
-          
-          // Show success message
-          toast.success('Logged in successfully!');
-          
-          // Redirect to the intended URL or home
-          const from = location.state?.from?.pathname || '/';
-          console.log('Redirecting after Firebase login to:', from);
-          navigate(from, { replace: true });
-          
-          return { success: true, user: userData };
-        }
-        
-        // Handle regular email/password login
-        console.log('Calling auth.login with credentials...', { 
-          email: loginEmail, 
-          hasPassword: !!loginPassword,
-          rememberMe 
-        });
-        
-        // Add a timeout to prevent hanging
-        const loginPromise = api.auth.login({
-          email: loginEmail,
-          password: loginPassword,
-          rememberMe
-        });
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Login request timed out after 30 seconds')), 30000)
-        );
-        
-        const response = await Promise.race([loginPromise, timeoutPromise]);
-        console.log('Auth login response:', response);
+        const { token, refreshToken, user } = await authService.login(email, password);
+        if (!token || !refreshToken) throw new Error('No tokens returned');
 
-        // Check if we have a valid response with user data
-        if (response && (response.user || response.data?.user || response.data)) {
-          // Handle different response formats
-          const userData = response.user || response.data?.user || response.data;
-          const token = response.token || response.data?.token || localStorage.getItem('token');
-          
-          console.log('Login successful, user data:', {
-            id: userData._id,
-            email: userData.email,
-            role: userData.role,
-            hasToken: !!token
-          });
-          
-          // Store the token in localStorage if available
-          if (token) {
-            localStorage.setItem('token', token);
-            console.log('Token stored in localStorage');
-          } else {
-            console.warn('No token received in login response');
-          }
-          
-          // Update user state and localStorage
-          setUser(userData);
-          localStorage.setItem('user', JSON.stringify(userData));
-          
-          // Show success message
-          toast.success('Logged in successfully!');
-          
-          // Redirect to the intended URL or home
-          const from = location.state?.from?.pathname || '/';
-          console.log('Redirecting after login to:', from);
-          navigate(from, { replace: true });
-          
-          return { success: true, user: userData };
-        } else {
-          const errorMsg = response?.message || 'Login failed: Invalid response from server';
-          console.error('Login failed - Invalid response:', {
-            response,
-            hasUserData: !!(response?.user || response?.data?.user || response?.data),
-            hasToken: !!(response?.token || response?.data?.token)
-          });
-          throw new Error(errorMsg);
-        }
-      } catch (error) {
-        // Enhanced error logging
-        const errorDetails = {
-          name: error.name,
-          message: error.message,
-          code: error.code,
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          config: {
-            url: error.config?.url,
-            method: error.config?.method,
-            withCredentials: error.config?.withCredentials,
-            headers: error.config?.headers
-          },
-          response: error.response?.data || 'No response data',
-          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        };
-        
-        console.error('Login error details:', JSON.stringify(errorDetails, null, 2));
-        
-        // Log to server if available
-        if (window.trackJs) {
-          window.trackJs.track(error);
-        }
-        
-        // Extract user-friendly error message
-        let errorMessage = 'Login failed. Please try again.';
-        
-        if (error.response) {
-          // The request was made and the server responded with a status code
-          // that falls out of the range of 2xx
-          const { status, data } = error.response;
-          
-          if (status === 401) {
-            errorMessage = data?.message || 'Invalid email or password. Please try again.';
-          } else if (status === 403) {
-            errorMessage = data?.message || 'Access denied. Please verify your account or contact support.';
-          } else if (status === 429) {
-            errorMessage = 'Too many login attempts. Please try again later.';
-          } else if (status >= 500) {
-            errorMessage = 'Server error. Please try again later or contact support if the problem persists.';
-          } else if (data?.message) {
-            errorMessage = data.message;
-          }
-        } else if (error.request) {
-          // The request was made but no response was received
-          errorMessage = 'Unable to connect to the server. Please check your internet connection.';
-        } else if (error.message) {
-          // Something happened in setting up the request that triggered an Error
-          errorMessage = error.message;
-        }
-        
-        // Update error state and show toast
-        setError(errorMessage);
-        toast.error(errorMessage, {
-          position: 'top-right',
-          autoClose: 5000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true
-        });
-        
-        // Clear any partial auth data
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setUser(null);
-        
-        return { 
-          success: false, 
-          error: errorMessage,
-          status: error.response?.status,
-          data: error.response?.data
-        };
+        persistAuthData({ token, refreshToken, user });
+        setUser(user);
+        setIsAuthenticated(true);
+        authService.setAuthToken?.(token);
+
+        toast.success('Login successful!');
+        recordAttempt(identifier, true);
+        return { success: true, user };
+      } catch (err) {
+        const msg = err.response?.data?.message || 'Login failed';
+        setError(msg);
+        if (isAuthPage) toast.error(msg);
+        recordAttempt(identifier, false);
+        return { success: false, error: msg };
       } finally {
         setLoading(false);
       }
     },
-    [navigate, location.state]
+    [isAuthPage, persistAuthData, isRateLimited, recordAttempt],
   );
 
-  // Signup function
-  const signup = useCallback(async (userData) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // Validate required fields
-      if (!userData.name || !userData.email || !userData.password) {
-        throw new Error('Please provide all required fields');
+  /* ------------------------------- Signup -------------------------------- */
+  const signup = useCallback(
+    async (name, email, password) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const { data } = await authService.register({ name, email, password });
+        const { token, refreshToken, user } = data;
+
+        persistAuthData({ token, refreshToken, user });
+
+        // Fetch full user profile
+        const { data: fullUser } = await authService.getCurrentUser();
+        setUser(fullUser);
+        localStorage.setItem('scantyx_user', JSON.stringify(fullUser));
+
+        toast.success('Registration successful!');
+        return { success: true };
+      } catch (err) {
+        const msg = err.response?.data?.message || 'Registration failed';
+        setError(msg);
+        if (isAuthPage) toast.error(msg);
+        return { success: false, error: msg };
+      } finally {
+        setLoading(false);
       }
-      
-      // Use the auth.register function from the API service
-      const result = await auth.register({
-        name: userData.name.trim(),
-        email: userData.email.trim(),
-        password: userData.password,
-        passwordConfirm: userData.passwordConfirm || userData.password
-      });
-      
-      console.log('Signup result:', result);
-      
-      if (result && (result.user || result.data?.user)) {
-        const user = result.user || result.data.user;
-        setUser(user);
-        
-        // Store the token if available
-        if (result.token) {
-          localStorage.setItem('token', result.token);
-        }
-        
-        // Store user data
-        localStorage.setItem('user', JSON.stringify(user));
-        
-        // Show success message
-        toast.success('Registration successful! You are now logged in.');
-        
-        // Redirect to home or intended URL
-        const from = location.state?.from?.pathname || '/';
-        navigate(from, { replace: true });
-        
-        return { success: true, user };
-      }
-      
-      throw new Error('Registration failed. Please try again.');
-    } catch (error) {
-      console.error('Signup error:', error);
-      const errorMsg = error.message || 'An error occurred during signup. Please try again.';
-      setError(errorMsg);
-      toast.error(errorMsg);
-      return { success: false, error: errorMsg };
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate, location.state]);
-
-  // Check if the current user is an admin
-  const isAdmin = useMemo(() => {
-    return user?.role === 'admin';
-  }, [user]);
-
-  // Value to be provided by the context
-  const contextValue = useMemo(() => ({
-    user,
-    loading,
-    error,
-    login,
-    logout,
-    isAuthenticated: !!user,
-    isAdmin,
-    isInitialized,
-  }), [user, loading, error, login, logout, isAdmin, isInitialized]);
-
-  return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-    </AuthContext.Provider>
+    },
+    [isAuthPage, persistAuthData],
   );
+
+  /* --------------------------- Context value ----------------------------- */
+  const contextValue = useMemo(
+    () => ({
+      user,
+      loading,
+      error,
+      login,
+      signup,
+      logout,
+      isAuthenticated,
+      isAdmin,
+      isInitialized,
+    }),
+    [
+      user,
+      loading,
+      error,
+      login,
+      signup,
+      logout,
+      isAuthenticated,
+      isAdmin,
+      isInitialized,
+    ],
+  );
+
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 };

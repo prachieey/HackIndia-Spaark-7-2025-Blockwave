@@ -44,72 +44,47 @@ console.log('Firebase Config:', {
   measurementId: firebaseConfig.measurementId ? '***' : 'Not set'
 });
 
-// Initialize Firebase with checks to prevent multiple initializations
-let app;
-let analytics;
-let db;
-let auth;
-let googleProvider;
-let facebookProvider;
-let appleProvider;
-
-// Initialize Firebase only if it hasn't been initialized yet
-if (!getApps().length) {
-  try {
-    app = initializeApp(firebaseConfig);
-    console.log('Firebase app initialized successfully');
-    
-    // Initialize Auth
+// Initialize Firebase services with error handling
+const initFirebase = () => {
+  let app;
+  let analytics;
+  let db;
+  
+  if (!getApps().length) {
     try {
-      auth = getAuth(app);
+      // Validate Firebase config
+      const requiredConfig = [
+        'apiKey', 'authDomain', 'projectId', 
+        'storageBucket', 'messagingSenderId', 'appId'
+      ];
       
-      // Initialize providers
-      googleProvider = new GoogleAuthProvider();
-      facebookProvider = new FacebookAuthProvider();
-      appleProvider = new OAuthProvider('apple.com');
+      const missingConfig = requiredConfig.filter(key => !firebaseConfig[key]);
+      if (missingConfig.length > 0) {
+        throw new Error(`Missing required Firebase config: ${missingConfig.join(', ')}`);
+      }
       
-      // Configure Google provider
-      googleProvider.addScope('profile');
-      googleProvider.addScope('email');
-      googleProvider.setCustomParameters({
-        prompt: 'select_account',
-        client_id: import.meta.env.VITE_FIREBASE_WEB_CLIENT_ID || ''
-      });
+      // Initialize Firebase
+      app = initializeApp(firebaseConfig);
+      console.log('Firebase app initialized successfully');
       
-      facebookProvider.setCustomParameters({
-        'display': 'popup'
-      });
-      
-      console.log('Firebase Auth initialized successfully');
-    } catch (authError) {
-      console.error('Error initializing Firebase Auth:', authError);
-    }
-    
-    // Initialize Firestore with new cache settings
-    try {
-      db = initializeFirestore(app, {
-        cache: {
-          // Use memory cache first, then fall back to IndexedDB
-          kind: 'memory',
-          // Optional: Set a size limit for the memory cache
-          size: 10 * 1024 * 1024, // 10MB
-          // Enable offline persistence
-          persistence: true,
-          // Optional: Set a custom cache key prefix
-          keyPrefix: 'scantyx-cache-'
-        },
-        // Keep the old settings for compatibility
-        cacheSizeBytes: CACHE_SIZE_UNLIMITED,
-        experimentalForceLongPolling: false,
-        experimentalAutoDetectLongPolling: true
-      });
-      
-      console.log('Firestore initialized with new cache settings');
-      
-      // Fallback for older browsers if needed
-      if (typeof window !== 'undefined' && 'indexedDB' in window) {
-        // Only enable persistence if not already enabled by the new cache settings
-        if (!db._persistenceEnabled) {
+      // Initialize Firestore with persistence
+      try {
+        db = initializeFirestore(app, {
+          cache: {
+            kind: 'memory',
+            size: 10 * 1024 * 1024, // 10MB
+            persistence: true,
+            keyPrefix: 'scantyx-cache-'
+          },
+          cacheSizeBytes: CACHE_SIZE_UNLIMITED,
+          experimentalForceLongPolling: false,
+          experimentalAutoDetectLongPolling: true
+        });
+        
+        console.log('Firestore initialized with cache settings');
+        
+        // Enable offline persistence for browsers that support it
+        if (typeof window !== 'undefined' && 'indexedDB' in window) {
           enableIndexedDbPersistence(db).catch((err) => {
             if (err.code === 'failed-precondition') {
               console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
@@ -118,37 +93,119 @@ if (!getApps().length) {
             }
           });
         }
+      } catch (firestoreError) {
+        console.error('Error initializing Firestore with cache settings:', firestoreError);
+        // Fallback to simple initialization
+        db = initializeFirestore(app, { cacheSizeBytes: CACHE_SIZE_UNLIMITED });
       }
+
+      // Initialize Analytics only in production and if window is defined
+      if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+        isSupported()
+          .then((supported) => {
+            if (supported) {
+              analytics = getAnalytics(app);
+              console.log('Firebase Analytics initialized');
+            } else {
+              console.warn('Firebase Analytics is not supported in this browser');
+            }
+          })
+          .catch((error) => {
+            console.error('Error initializing Firebase Analytics:', error);
+          });
+      }
+
+      return { app, db, analytics };
     } catch (error) {
-      console.error('Error initializing Firestore:', error);
-      // Fallback to default initialization if there's an error
-      db = initializeFirestore(app, {});
+      console.error('Error initializing Firebase:', error);
+      throw error;
     }
+  } else {
+    app = getApp();
+    db = getFirestore(app);
+    console.log('Using existing Firebase app instance');
+    return { app, db, analytics };
+  }
+};
+
+// Initialize Firebase
+let app, db, analytics;
+try {
+  const initResult = initFirebase();
+  app = initResult.app;
+  db = initResult.db;
+  analytics = initResult.analytics;
+  console.log('Firebase initialized successfully');
+} catch (error) {
+  console.error('Firebase initialization failed:', error);
+  // Re-throw to prevent the app from starting in a broken state
+  throw new Error(`Failed to initialize Firebase: ${error.message}`);
+}
+
+// Initialize Auth
+const auth = getAuth(app);
+
+// Configure auth providers with additional scopes and custom parameters
+const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('profile');
+googleProvider.addScope('email');
+googleProvider.setCustomParameters({
+  prompt: 'select_account', // Always prompt to select account
+  login_hint: '' // Can be set based on user input
+});
+
+const facebookProvider = new FacebookAuthProvider();
+facebookProvider.addScope('email');
+facebookProvider.addScope('public_profile');
+
+const appleProvider = new OAuthProvider('apple.com');
+appleProvider.addScope('email');
+appleProvider.addScope('name');
+
+// Configure auth persistence with better error handling
+const configureAuthPersistence = async () => {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+    console.log('Auth persistence set to LOCAL');
     
-    // Initialize Analytics if supported (only in browser)
-    if (typeof window !== 'undefined') {
-      isSupported()
-        .then(supported => {
-          if (supported) {
-            analytics = getAnalytics(app);
-            console.log('Firebase Analytics initialized');
-          } else {
-            console.log('Firebase Analytics is not supported in this browser');
-          }
-        })
-        .catch(err => console.error('Error initializing Analytics:', err));
-    }
+    // Monitor auth state changes
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log('User signed in:', user.uid);
+      } else {
+        console.log('User signed out');
+      }
+    });
     
   } catch (error) {
-    console.error('Firebase initialization error:', error);
-    throw error; // Re-throw to prevent silent failures
+    console.error('Error setting auth persistence:', error);
+    // Fallback to session persistence if local fails
+    if (error.code === 'auth/unsupported-persistence-type') {
+      console.warn('Local persistence not supported, falling back to session');
+      await setPersistence(auth, 'SESSION');
+    }
   }
-} else {
-  // Use existing app instance if already initialized
-  app = getApp();
-  db = getFirestore(app);
-  console.log('Using existing Firebase app instance');
-}
+};
+
+configureAuthPersistence();
+
+// Configure Google provider
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+  login_hint: '',
+  client_id: import.meta.env.VITE_FIREBASE_WEB_CLIENT_ID || ''
+});
+
+// Configure Facebook provider
+facebookProvider.setCustomParameters({
+  display: 'popup'
+});
+
+// Configure Apple provider
+appleProvider.addScope('email');
+appleProvider.addScope('name');
+
+console.log('Firebase services initialized successfully');
 
 // Export the Firebase services
 // Sign in with Google
@@ -237,7 +294,7 @@ export const signInWithGoogle = async () => {
   }
 };
 
-// Handle the OAuth redirect result after user returns from Google sign-in
+// Handle the OAuth redirect result after user returns from OAuth providers
 export const handleRedirectResult = async () => {
   try {
     console.log('Attempting to get redirect result...');
@@ -246,6 +303,12 @@ export const handleRedirectResult = async () => {
     if (!auth) {
       console.error('Auth not initialized');
       return { user: null, error: 'Authentication service not available' };
+    }
+    
+    
+    if (!isAppleRedirect) {
+      console.log('No OAuth redirect detected');
+      return { user: null, error: null };
     }
     
     try {
@@ -346,10 +409,28 @@ export const signInWithFacebook = async () => {
 
 export const signInWithApple = async () => {
   try {
-    const result = await signInWithPopup(auth, appleProvider);
-    return { user: result.user, error: null };
+    // Configure the Apple provider with required scopes
+    const appleProvider = new OAuthProvider('apple.com');
+    appleProvider.addScope('email');
+    appleProvider.addScope('name');
+    
+    // Set custom parameters for Apple Sign In
+    appleProvider.setCustomParameters({
+      // Always request email and name from Apple
+      locale: 'en',
+      prompt: 'login',
+      response_mode: 'form_post',
+    });
+
+    // Use redirect instead of popup for better compatibility with Apple
+    await signInWithRedirect(auth, appleProvider);
+    return { user: null, error: null }; // Will be handled by redirect
   } catch (error) {
-    return { user: null, error: error.message };
+    console.error('Apple Sign In Error:', error);
+    return { 
+      user: null, 
+      error: error.message || 'Failed to start Apple Sign In. Please try again.' 
+    };
   }
 };
 

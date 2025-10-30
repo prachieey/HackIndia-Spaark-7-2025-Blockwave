@@ -4,31 +4,179 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Development CSP - Configured for video and necessary resources -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lato:wght@300;400;700&family=Playfair+Display:wght@700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Development CSP - Configured for Firebase and necessary resources -->
+    <!-- Preconnect to external domains for better performance -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    
+    <!-- Content Security Policy -->
     <meta http-equiv="Content-Security-Policy" content="
       default-src 'self';
-      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://*.firebaseio.com https://*.google-analytics.com https://*.firebase.com;
-      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.googleapis.com;
-      style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.googleapis.com;
-      font-src 'self' https://fonts.gstatic.com data:;
-      img-src 'self' data: blob: https:;
-      connect-src 'self' https://api.emailjs.com https://*.googleapis.com https://*.firebaseio.com https://*.firebase.com http://localhost:* https://localhost:* ws://localhost:* wss://localhost:* https://www.google-analytics.com https://analytics.google.com https://*.firebase.com;
-      media-src 'self' blob: data: https: http: 
-        https://*.w3schools.com 
-        https://*.googleapis.com 
+      script-src 'self' 'unsafe-inline' 'unsafe-eval' 
+        https://www.googletagmanager.com 
+        https://www.google-analytics.com 
+        https://www.gstatic.com 
+        https://apis.google.com 
+        https://*.firebase.com 
+        https://*.firebaseio.com 
+        https://*.firebaseinstallations.googleapis.com
+        https://*.gstatic.com
+        https://*.google.com
+        https://*.googleapis.com
+        https://www.gstatic.com/firebasejs/;
+      img-src 'self' data: https: http:;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      connect-src 'self' http://localhost:5002 https://*.googleapis.com https://*.firebaseio.com;
+      
+      style-src 'self' 'unsafe-inline' 
+        https://fonts.googleapis.com 
+        https://*.googleapis.com
+        https://fonts.gstatic.com;
+      
+      font-src 'self' 
+        https://fonts.gstatic.com 
         https://*.gstatic.com 
-        https://storage.googleapis.com;
-      worker-src 'self' blob: https://*.firebase.com;
-      frame-src 'self' https://*.google.com https://*.firebase.com;
+        data:;
+      
+      img-src 'self' 
+        https: data: blob:;
+      
+      connect-src 'self' 
+        http://localhost:* 
+        ws://localhost:* 
+        wss://localhost:* 
+        http://127.0.0.1:* 
+        https://127.0.0.1:* 
+        ws://127.0.0.1:* 
+        wss://127.0.0.1:*
+        https://*.firebaseio.com 
+        https://*.firebase.com 
+        https://*.googleapis.com 
+        https://identitytoolkit.googleapis.com 
+        https://securetoken.googleapis.com 
+        wss://*.firebaseio.com
+        https://*.firebaseio.com/* 
+        https://*.firebase.com/* 
+        https://*.google-analytics.com 
+        https://*.analytics.google.com 
+        https://*.firebaseinstallations.googleapis.com 
+        https://identitytoolkit.googleapis.com/* 
+        https://securetoken.googleapis.com/* 
+        https://firebasestorage.googleapis.com 
+        https://www.googleapis.com 
+        https://www.googleapis.com/* 
+        https://*.google.com 
+        https://*.gstatic.com 
+        https://*.apple.com 
+        https://appleid.apple.com 
+        https://idmsa.apple.com 
+        https://*.apple-cloudkit.com 
+        https://api.emailjs.com;
+      
+      media-src 'self' 
+        blob: 
+        data: 
+        https: 
+        http:;
+      
+      worker-src 'self' 
+        blob: 
+        https://*.firebase.com 
+        https://*.firebaseapp.com;
+      
+      frame-src 'self' 
+        https://www.google.com 
+        https://www.youtube.com 
+        https://*.firebaseapp.com 
+        https://appleid.apple.com 
+        https://idmsa.apple.com 
+        https://*.firebase.com 
+        https://accounts.google.com 
+        https://apis.google.com 
+        https://web.facebook.com 
+        https://scontent.xx.fbcdn.net 
+        https://www.googletagmanager.com 
+        https://www.google.com/recaptcha/ 
+        https://recaptcha.google.com/recaptcha/ 
+        https://www.google.com/maps/;
+      
       object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+      upgrade-insecure-requests;
+        https://www.google.com;
+      
+      img-src 'self' 
+        data: 
+        blob: 
+        https:;
+      
+      connect-src 'self' 
+        http://localhost:* 
+        https://*.firebaseio.com 
+        https://*.googleapis.com 
+        https://*.firebase.com 
+        https://identitytoolkit.googleapis.com 
+        https://securetoken.googleapis.com 
+        wss://*.firebaseio.com 
+        ws://localhost:* 
+        wss://localhost:*
+        https://*.firebaseio.com/*
+        https://*.firebase.com/*
+        https://*.google-analytics.com 
+        https://*.analytics.google.com 
+        https://*.firebaseinstallations.googleapis.com
+        https://identitytoolkit.googleapis.com/*
+        https://securetoken.googleapis.com/*
+        https://firebasestorage.googleapis.com
+        https://www.googleapis.com
+        https://www.googleapis.com/*
+        https://*.google.com
+        https://*.gstatic.com
+        https://*.apple.com
+        https://appleid.apple.com
+        https://idmsa.apple.com
+        https://*.apple-cloudkit.com
+        http://127.0.0.1:* 
+        https://127.0.0.1:* 
+        ws://127.0.0.1:* 
+        wss://127.0.0.1:*
+        https://api.emailjs.com;
+      
+      media-src 'self' 
+        blob: 
+        data: 
+        https: 
+        http:;
+      
+      worker-src 'self' 
+        blob: 
+        https://*.firebase.com
+        https://*.firebaseapp.com;
+      
+      frame-src 'self' 
+        https://www.google.com 
+        https://www.youtube.com 
+        https://*.firebaseapp.com
+        https://appleid.apple.com
+        https://idmsa.apple.com
+        https://*.firebase.com
+        https://accounts.google.com
+        https://apis.google.com;
+      
+      object-src 'none';
+      base-uri 'self';
+      form-action 'self';
+      upgrade-insecure-requests;
     ">
     <meta name="react-version" content="18.2.0">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Poppins:wght@300;400;500;600;700&display=swap');
-    </style>
     <title>Scantyx | No Scams, Just Scans</title>
   </head>
   <body class="bg-space-black text-holographic-white">

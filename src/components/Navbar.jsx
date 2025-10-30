@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation as useRouteLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   QrCode, 
   Menu, 
@@ -10,7 +11,6 @@ import {
   UserPlus, 
   User, 
   Shield, 
-  LogOut, 
   ChevronDown, 
   Ticket,
   LayoutDashboard,
@@ -21,21 +21,36 @@ import {
   Search,
   Map
 } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { useWeb3 } from '../contexts/blockchain/Web3Context';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLocation as useLocationContext } from '../contexts/LocationContext';
 import WalletConnect from './wallet/WalletConnect';
 import { cn } from '../lib/utils';
 
 // NavLink component with active state
-const NavLink = ({ to, children, className = '', ...props }) => {
-  const location = useLocation();
+const NavLink = ({ to, children, className = '', onClick, handleNavigation, ...props }) => {
+  const location = useRouteLocation();
   const isActive = location.pathname === to;
+  
+  const handleClick = (e) => {
+    // Stop event propagation to prevent parent click handlers from firing
+    e.stopPropagation();
+    e.preventDefault();
+    
+    // Call the handleNavigation function from parent
+    if (handleNavigation) {
+      handleNavigation(to, e);
+    }
+    
+    // Call the original onClick handler if provided
+    if (onClick) {
+      onClick(e);
+    }
+  };
   
   return (
     <Link
       to={to}
+      onClick={handleClick}
       className={cn(
         'relative px-4 py-2 text-sm font-medium transition-colors duration-200',
         isActive 
@@ -68,31 +83,32 @@ const Navbar = ({ openAuthModal }) => {
   const [isLocationOpen, setIsLocationOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
-  const location = useLocation();
+  const routeLocation = useRouteLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { selectedCity, updateLocation } = useLocationContext();
   const isAdmin = user?.role === 'admin';
-  const { isConnected } = useWeb3();
   const profileRef = useRef(null);
   const menuRef = useRef(null);
 
-  // Toggle scroll effect and close dropdowns when clicking outside
-  const handleClickOutside = useCallback((event) => {
-    if (profileRef.current && !profileRef.current.contains(event.target) && !event.target.closest('.profile-menu-button')) {
-      setIsProfileOpen(false);
-    }
-    if (menuRef.current && !menuRef.current.contains(event.target) && !event.target.closest('.mobile-menu-button')) {
-      setIsMenuOpen(false);
-    }
-    // Only close location dropdown if clicking outside both the trigger and the dropdown itself
-    if (isLocationOpen && 
-        !event.target.closest('.location-selector-trigger') && 
-        !event.target.closest('.location-dropdown') &&
-        !event.target.closest('.location-search-input')) {
-      setIsLocationOpen(false);
-    }
+  // Handle clicks outside of dropdowns to close them
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      // Close profile dropdown if click is outside
+      if (profileRef.current && !profileRef.current.contains(e.target) && !e.target.closest('.profile-menu-button')) {
+        setIsProfileOpen(false);
+      }
+      // Close mobile menu if click is outside
+      if (menuRef.current && !menuRef.current.contains(e.target) && !e.target.closest('.mobile-menu-button')) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   useEffect(() => {
@@ -101,21 +117,35 @@ const Navbar = ({ openAuthModal }) => {
     };
 
     window.addEventListener('scroll', handleScroll);
-    document.addEventListener('mousedown', handleClickOutside);
     
     return () => {
       window.removeEventListener('scroll', handleScroll);
-      document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [handleClickOutside, isMenuOpen, isProfileOpen]);
+  }, []);
 
-  // Navigation items
+  // Navigation items - updated to match routes in App.jsx
   const navItems = [
     { name: 'Home', path: '/' },
+    { name: 'Events', path: '/events' },
     { name: 'Explore', path: '/explore' },
-    { name: 'Resell', path: '/events' },
-    { name: 'About', path: '/tickets' },
+    { name: 'Resell', path: '/resell' },
+    { name: 'About', path: '/about' },
   ];
+  
+  // Simple navigation function
+  const navigateTo = (path, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    // Ensure we're using the full path and not just the relative one
+    const fullPath = path.startsWith('/') ? path : `/${path}`;
+    console.log('Navigating to:', fullPath);
+    navigate(fullPath);
+    setIsMenuOpen(false);
+    setIsProfileOpen(false);
+    window.scrollTo(0, 0);
+  };
 
   // Popular cities for location dropdown
   const popularCities = [
@@ -339,43 +369,6 @@ const Navbar = ({ openAuthModal }) => {
     },
   ];
 
-  const handleLogout = async (e) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    
-    try {
-      console.log('[Navbar] Starting logout process...');
-      
-      // Close the profile dropdown
-      setIsProfileOpen(false);
-      setIsMenuOpen(false);
-      
-      // Call the logout function from AuthContext
-      const result = await logout();
-      
-      if (result && result.success) {
-        console.log('[Navbar] Logout successful, redirecting to home...');
-        // Use window.location to force a full page reload and clear all states
-        window.location.href = '/';
-      } else {
-        console.error('[Navbar] Logout failed:', result?.error || 'Unknown error');
-      }
-    } catch (error) {
-      console.error('[Navbar] Error during logout:', error);
-      // Even if there was an error, we should still try to redirect
-      window.location.href = '/';
-    }
-  };
-  
-  // Handle navigation to a specific route
-  const navigateTo = useCallback((path) => {
-    navigate(path);
-    setIsMenuOpen(false);
-    setIsProfileOpen(false);
-  }, [navigate]);
-  
   // Toggle mobile menu
   const toggleMenu = useCallback(() => {
     setIsMenuOpen(prev => !prev);
@@ -464,11 +457,16 @@ const Navbar = ({ openAuthModal }) => {
             </div>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-1">
+            <nav className="hidden md:flex items-center space-x-1" onClick={(e) => e.stopPropagation()}>
               {navItems.map((item) => (
-                <NavLink key={item.path} to={item.path}>
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors duration-200"
+                  onClick={(e) => navigateTo(item.path, e)}
+                >
                   {item.name}
-                </NavLink>
+                </Link>
               ))}
               {/* Location Selector - Only show when user is logged in */}
               {user && (
@@ -496,9 +494,7 @@ const Navbar = ({ openAuthModal }) => {
                   <span className="truncate max-w-[120px] font-medium">
                     {selectedCity || 'Select City'}
                   </span>
-                  <ChevronDown 
-                    className={`h-4 w-4 transition-transform duration-200 ${isLocationOpen ? 'transform rotate-180' : ''}`} 
-                  />
+                  <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isLocationOpen ? 'transform rotate-180' : ''}`} />
                 </button>
                 
                 {/* Location Dropdown */}
@@ -711,25 +707,33 @@ const Navbar = ({ openAuthModal }) => {
                               <Link
                                 to="/admin/dashboard"
                                 className="flex items-center px-3 py-2.5 text-sm rounded-lg text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 transition-colors group mt-1"
-                                onClick={() => setIsProfileOpen(false)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIsProfileOpen(false);
+                                }}
                               >
                                 <Shield className="w-4 h-4 mr-3 text-amber-400 group-hover:text-amber-300 transition-colors" />
                                 Admin Dashboard
                                 <ChevronDown className="ml-auto w-4 h-4 text-amber-500 transform -rotate-90" />
                               </Link>
                             )}
-                          </div>
-
-                          {/* Footer */}
-                          <div className="p-3 border-t border-dark-700/50 bg-dark-900/30">
+                            
+                            {/* Logout Button */}
                             <button
-                              onClick={handleLogout}
-                              className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                logout();
+                                setIsProfileOpen(false);
+                              }}
+                              className="w-full flex items-center px-3 py-2.5 text-sm rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors group mt-1"
                             >
-                              <LogOut className="w-4 h-4 mr-2" />
+                              <LogOut className="w-4 h-4 mr-3 text-red-400 group-hover:text-red-300 transition-colors" />
                               Sign out
                             </button>
                           </div>
+
+                          {/* Footer section removed */}
                         </div>
                       </motion.div>
                     )}
@@ -793,10 +797,7 @@ const Navbar = ({ openAuthModal }) => {
                       ? 'text-white bg-dark-700/50'
                       : 'text-gray-300 hover:text-white hover:bg-dark-700/30'
                   }`}
-                  onClick={() => {
-                    closeMenu();
-                    navigateTo(item.path);
-                  }}
+                  onClick={(e) => navigateTo(item.path, e)}
                 >
                   {item.name}
                 </Link>
